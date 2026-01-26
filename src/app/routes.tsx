@@ -13,7 +13,7 @@ export default function AppRoutes() {
       <Route element={<CandidateLayout />}>
         <Route path="/join-exam" element={<JoinExam />} />
         <Route path="/system-check" element={<SystemCheck />} />
-        <Route path="/exam" element={<Exam />} />
+        <Route path="/exam/:examId" element={<Exam />} />
       </Route>
 
       {/* Admin Routes */}

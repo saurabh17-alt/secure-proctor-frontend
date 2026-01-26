@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useParams } from "react-router-dom";
 import {
   startMediaMonitor,
   checkMediaPermissions,
@@ -9,19 +10,90 @@ import {
 } from "../../proctoring/core/streamManager";
 import { MEDIA_PRESETS } from "../../proctoring/core/mediaConfig";
 
-function emitEvent(type: string, data?: any) {
-  console.log("PROCTOR EVENT:", type, data);
+// Type for proctor events matching backend schema
+type ProctorEventType =
+  | "camera_status"
+  | "mic_status"
+  | "tab_blur"
+  | "fullscreen_exit"
+  | "stream_lost";
+
+type SeverityLevel = "info" | "warning" | "critical";
+
+interface ProctorEvent {
+  examId: string;
+  candidateId: string;
+  type: ProctorEventType;
+  payload: Record<string, any>;
+  severity: SeverityLevel;
+  timestamp: number;
 }
 
 export default function Exam() {
+  const { examId } = useParams<{ examId: string }>();
   const [mediaError, setMediaError] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
+
+  // TODO: Get candidateId from auth context or query params
+  const candidateId = "candidate_" + Math.random().toString(36).substr(2, 9);
 
   // ⚙️ CONFIGURE REQUIREMENTS HERE
   // MEDIA_PRESETS.CAMERA_ONLY - Only camera required
   // MEDIA_PRESETS.AUDIO_ONLY - Only microphone required
   // MEDIA_PRESETS.BOTH - Both camera and microphone required
   const requirements = MEDIA_PRESETS.BOTH;
+
+  // Send proctor event to backend API
+  const sendProctorEvent = async (
+    event: Omit<ProctorEvent, "examId" | "candidateId">,
+  ) => {
+    try {
+      const response = await fetch("/api/proctor/events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          examId: examId || "default_exam",
+          candidateId,
+          ...event,
+        }),
+      });
+
+      if (!response.ok) {
+        console.error("Failed to send proctor event:", response.status);
+      } else {
+        const result = await response.json();
+        console.log(
+          "✅ Event sent:",
+          event.type,
+          "→ Event ID:",
+          result.event_id,
+        );
+      }
+    } catch (error) {
+      console.error("❌ Error sending proctor event:", error);
+    }
+  };
+
+  // Handle proctor events from media monitor
+  const handleProctorEvent = (type: string, payload: any) => {
+    console.log("PROCTOR EVENT:", type, payload);
+
+    // Determine severity based on payload
+    let severity: SeverityLevel = "info";
+    if (payload.status === "off" || payload.lost || payload.exited) {
+      severity = "critical";
+    } else if (payload.blurred || payload.duration) {
+      severity = "warning";
+    }
+
+    // Send to backend
+    sendProctorEvent({
+      type: type as ProctorEventType,
+      payload,
+      severity,
+      timestamp: Date.now(),
+    });
+  };
 
   useEffect(() => {
     console.log("Exam started → proctoring ON");
@@ -60,8 +132,8 @@ export default function Exam() {
         console.log("Media stream initialized successfully");
         setIsInitializing(false);
 
-        // Start monitoring (does NOT cleanup stream)
-        stopMonitoring = startMediaMonitor(emitEvent);
+        // Start monitoring with event handler
+        stopMonitoring = startMediaMonitor(handleProctorEvent);
       } catch (error) {
         console.error("Media initialization error:", error);
         setMediaError(
@@ -73,13 +145,51 @@ export default function Exam() {
 
     init();
 
+    // Monitor tab visibility (tab switching)
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        console.warn("⚠️ Tab blur detected");
+        sendProctorEvent({
+          type: "tab_blur",
+          payload: {
+            blurred: true,
+            timestamp: Date.now(),
+          },
+          severity: "warning",
+          timestamp: Date.now(),
+        });
+      }
+    };
+
+    // Monitor fullscreen exit
+    const handleFullscreenChange = () => {
+      if (!document.fullscreenElement) {
+        console.warn("⚠️ Fullscreen exit detected");
+        sendProctorEvent({
+          type: "fullscreen_exit",
+          payload: {
+            exited: true,
+            reason: "user_action",
+          },
+          severity: "critical",
+          timestamp: Date.now(),
+        });
+      }
+    };
+
+    // Add event listeners
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+
     // Cleanup: stop monitoring AND cleanup stream when exam truly ends
     return () => {
       console.log("Exam ended → stopping monitoring + cleaning stream");
       stopMonitoring?.();
       cleanupMediaStream();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
     };
-  }, []);
+  }, [examId, candidateId]);
 
   if (isInitializing) {
     return (

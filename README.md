@@ -83,11 +83,73 @@ frontend/
 ### 2. Routing System
 
 - ✅ React Router setup with layouts
-- ✅ Candidate routes: `/`, `/system-check`, `/exam`
+- ✅ Candidate routes: `/join-exam`, `/system-check`, `/exam/:examId`
 - ✅ Admin routes: `/admin`
 - ✅ Layout components with headers and footers
+- ✅ Dynamic exam IDs for multiple exams
 
-### 3. UI/UX
+#### **Available Routes**
+
+| Route           | Description                    | Parameters                        |
+| --------------- | ------------------------------ | --------------------------------- |
+| `/join-exam`    | Exam entry point               | None                              |
+| `/system-check` | Pre-exam system check          | None                              |
+| `/exam/:examId` | Main exam page with proctoring | `examId` - Unique exam identifier |
+| `/admin`        | Admin dashboard                | None                              |
+
+**Example URLs:**
+
+- http://localhost:5173/exam/exam_123
+- http://localhost:5173/exam/midterm_2026
+- http://localhost:5173/exam/final_exam
+
+### 3. Backend Integration
+
+- ✅ API integration for proctor events
+- ✅ Vite proxy configuration (no CORS issues)
+- ✅ Type-safe event schemas matching backend
+- ✅ Real-time event sending to backend API
+- ✅ Tab blur detection and reporting
+- ✅ Fullscreen exit detection and reporting
+
+#### **Proctor Events Sent to Backend**
+
+The frontend automatically sends these events to the backend:
+
+1. **Camera Status** (`camera_status`)
+   - Triggered when camera turns on/off
+   - Severity: `critical` if off, `info` if on
+
+2. **Microphone Status** (`mic_status`)
+   - Triggered when microphone turns on/off
+   - Severity: `critical` if off, `info` if on
+
+3. **Tab Blur** (`tab_blur`)
+   - Triggered when candidate switches tabs
+   - Severity: `warning`
+
+4. **Fullscreen Exit** (`fullscreen_exit`)
+   - Triggered when candidate exits fullscreen
+   - Severity: `critical`
+
+5. **Stream Lost** (`stream_lost`)
+   - Triggered when media stream disconnects
+   - Severity: `critical`
+
+**Event Payload Example:**
+
+```typescript
+{
+  examId: "exam_123",
+  candidateId: "candidate_abc123",
+  type: "camera_status",
+  payload: { enabled: true, deviceId: "camera_001" },
+  severity: "info",
+  timestamp: 1769433337465
+}
+```
+
+### 4. UI/UX
 
 - ✅ Tailwind CSS fully configured
 - ✅ Responsive design
@@ -136,6 +198,7 @@ See [MEDIA_REQUIREMENTS.md](MEDIA_REQUIREMENTS.md) for detailed documentation.
 
 - Node.js 18+
 - npm or yarn
+- Backend API running (see [backend/README.md](../backend/README.md))
 
 ### Install Dependencies
 
@@ -144,11 +207,59 @@ cd frontend
 npm install
 ```
 
+### Configure Backend Connection
+
+The frontend uses Vite proxy to connect to the backend. Configuration is in [`vite.config.ts`](vite.config.ts):
+
+```typescript
+server: {
+  proxy: {
+    '/api': {
+      target: 'http://localhost:8000',
+      changeOrigin: true,
+    },
+    '/ws': {
+      target: 'ws://localhost:8000',
+      ws: true,
+      changeOrigin: true,
+    },
+  },
+}
+```
+
+**Make sure your backend is running on port 8000!**
+
 ### Run Development Server
 
 ```bash
 npm run dev
 ```
+
+**Frontend will run at:** http://localhost:5173
+
+### Test the Application
+
+1. **Start Backend** (in separate terminal):
+
+   ```bash
+   cd ../backend
+   uvicorn app.main:app --reload
+   ```
+
+2. **Access Exam Page:**
+   - Navigate to: http://localhost:5173/exam/exam_123
+   - Allow camera and microphone permissions
+   - Check browser console for: `✅ Event sent: camera_status → Event ID: 1`
+
+3. **Test Event Detection:**
+   - Switch tabs → `tab_blur` event sent
+   - Exit fullscreen → `fullscreen_exit` event sent
+   - Disable camera → `camera_status` with severity `critical`
+
+4. **Verify in Backend:**
+   - Check backend terminal for: `INFO: Event ingested: camera_status...`
+   - Or visit: http://localhost:8000/docs (Swagger UI)
+   - Query events: `GET /api/proctor/events?exam_id=exam_123`
 
 ### Build for Production
 
@@ -164,33 +275,123 @@ npm run preview
 
 ## 📊 Event System
 
-The proctoring system emits events for monitoring:
+The proctoring system automatically sends events to the backend API at `/api/proctor/events`.
 
-### Events Emitted
+### Events Emitted and Sent to Backend
+
+**Camera Status Change:**
 
 ```typescript
-// Camera status change
 {
-  status: "on" | "off",
-  device: "camera",
-  required: true,
-  timestamp: 1706234567890
-}
-
-// Microphone status change
-{
-  status: "on" | "off",
-  device: "microphone",
-  required: true,
-  timestamp: 1706234567890
-}
-
-// Stream lost (only if required media fails)
-{
-  error: "Required media stream not initialized",
-  severity: "critical"
+  examId: "exam_123",
+  candidateId: "candidate_abc123",
+  type: "camera_status",
+  payload: {
+    status: "on" | "off",
+    device: "camera",
+    required: true,
+    timestamp: 1769433337465
+  },
+  severity: "info" | "critical",
+  timestamp: 1769433337465
 }
 ```
+
+**Microphone Status Change:**
+
+```typescript
+{
+  examId: "exam_123",
+  candidateId: "candidate_abc123",
+  type: "mic_status",
+  payload: {
+    status: "on" | "off",
+    device: "microphone",
+    required: true,
+    timestamp: 1769433337465
+  },
+  severity: "info" | "critical",
+  timestamp: 1769433337465
+}
+```
+
+**Tab Blur (Candidate Switched Tabs):**
+
+```typescript
+{
+  examId: "exam_123",
+  candidateId: "candidate_abc123",
+  type: "tab_blur",
+  payload: {
+    blurred: true,
+    timestamp: 1769433337465
+  },
+  severity: "warning",
+  timestamp: 1769433337465
+}
+```
+
+**Fullscreen Exit:**
+
+```typescript
+{
+  examId: "exam_123",
+  candidateId: "candidate_abc123",
+  type: "fullscreen_exit",
+  payload: {
+    exited: true,
+    reason: "user_action"
+  },
+  severity: "critical",
+  timestamp: 1769433337465
+}
+```
+
+**Stream Lost:**
+
+```typescript
+{
+  examId: "exam_123",
+  candidateId: "candidate_abc123",
+  type: "stream_lost",
+  payload: {
+    error: "Required media stream not initialized",
+    severity: "critical"
+  },
+  severity: "critical",
+  timestamp: 1769433337465
+}
+```
+
+### Backend Response
+
+When an event is successfully sent, the backend returns:
+
+```json
+{
+  "status": "ok",
+  "event_id": 1,
+  "server_timestamp": 1769433340123
+}
+```
+
+### Viewing Events
+
+**Option 1: Browser Console**
+
+- Open DevTools → Console
+- Look for: `✅ Event sent: camera_status → Event ID: 1`
+
+**Option 2: Backend Logs**
+
+- Check terminal running uvicorn
+- Look for: `INFO: Event ingested: camera_status from candidate_xxx (latency: 50ms)`
+
+**Option 3: Backend API**
+
+- Visit: http://localhost:8000/docs
+- Use `GET /api/proctor/events` endpoint
+- Filter by `exam_id` to see all events for an exam
 
 ## 🛠️ Key Files
 
@@ -259,17 +460,77 @@ The proctoring system emits events for monitoring:
 - Frontend project setup (React + TypeScript + Vite + Tailwind)
 - Production-ready proctoring system
 - Flexible media requirements configuration
-- Routing and layout structure
-- Basic candidate and admin pages
+- Routing and layout structure with dynamic exam IDs
+- Backend API integration with proctor events
+- Real-time event detection and reporting:
+  - Camera/microphone status monitoring
+  - Tab blur detection
+  - Fullscreen exit detection
+- Vite proxy configuration (no CORS issues)
+- Type-safe event schemas
 - Error handling and loading states
+- Basic candidate and admin pages
 
-**🚧 Next Steps (Backend):**
+**🚧 Next Steps:**
 
-- Backend API setup
-- WebSocket for real-time monitoring
-- Database for exam data
-- Admin panel integration
-- Recording and storage system
+- WebSocket integration for real-time admin monitoring
+- Video streaming with WebRTC
+- Admin dashboard with live event feed
+- Authentication and authorization
+- Session management
+- Recording and playback functionality
+
+## 🧪 Testing Guide
+
+### Quick Test Flow
+
+1. **Start Backend:**
+
+   ```bash
+   cd backend
+   uvicorn app.main:app --reload
+   ```
+
+2. **Start Frontend:**
+
+   ```bash
+   cd frontend
+   npm run dev
+   ```
+
+3. **Access Exam:**
+   - Open: http://localhost:5173/exam/test_exam_123
+   - Allow camera/mic permissions
+   - Open browser DevTools → Console
+
+4. **Test Events:**
+   - ✅ See initial `camera_status` and `mic_status` events
+   - ✅ Switch tabs → `tab_blur` event
+   - ✅ Enter/exit fullscreen → `fullscreen_exit` event
+   - ✅ Disable camera → `camera_status` with severity `critical`
+
+5. **Verify Backend:**
+   - Check backend logs for: `INFO: Event ingested...`
+   - Or query: http://localhost:8000/api/proctor/events?exam_id=test_exam_123
+
+### Troubleshooting
+
+**Events not sending?**
+
+- Verify backend is running on port 8000
+- Check Network tab in DevTools for 404/403 errors
+- Ensure Vite proxy is configured correctly
+
+**Camera/Mic not working?**
+
+- Allow browser permissions when prompted
+- Try Chrome (recommended for best compatibility)
+- Check if devices are available and not in use
+
+**Route not found?**
+
+- Make sure you're using `/exam/:examId` format
+- Example: `/exam/exam_123` not `/exam/`
 
 ## 📚 Additional Documentation
 
