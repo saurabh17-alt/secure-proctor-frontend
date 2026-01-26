@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useParams } from "react-router-dom";
 import {
   startMediaMonitor,
@@ -9,33 +9,32 @@ import {
   cleanupMediaStream,
 } from "../../proctoring/core/streamManager";
 import { MEDIA_PRESETS } from "../../proctoring/core/mediaConfig";
-
-// Type for proctor events matching backend schema
-type ProctorEventType =
-  | "camera_status"
-  | "mic_status"
-  | "tab_blur"
-  | "fullscreen_exit"
-  | "stream_lost";
-
-type SeverityLevel = "info" | "warning" | "critical";
-
-interface ProctorEvent {
-  examId: string;
-  candidateId: string;
-  type: ProctorEventType;
-  payload: Record<string, any>;
-  severity: SeverityLevel;
-  timestamp: number;
-}
+import {
+  emitProctorEvent,
+  resetSequence,
+} from "../../proctoring/events/eventEmitter";
+import {
+  connectSocket,
+  disconnectSocket,
+  onStateChange,
+  onMessage,
+} from "../../proctoring/socket/proctorSocket";
+import { getQueueSize } from "../../proctoring/events/eventQueue";
 
 export default function Exam() {
   const { examId } = useParams<{ examId: string }>();
   const [mediaError, setMediaError] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
+  const [connectionState, setConnectionState] =
+    useState<string>("disconnected");
+  const [queuedEvents, setQueuedEvents] = useState<number>(0);
 
-  // TODO: Get candidateId from auth context or query params
-  const candidateId = "candidate_" + Math.random().toString(36).substr(2, 9);
+  // Generate stable candidateId that doesn't change on re-render
+  const candidateId = useMemo(
+    () => "candidate_" + Math.random().toString(36).substr(2, 9),
+    [],
+  );
+  const sessionId = examId || "default_exam";
 
   // ⚙️ CONFIGURE REQUIREMENTS HERE
   // MEDIA_PRESETS.CAMERA_ONLY - Only camera required
@@ -43,60 +42,52 @@ export default function Exam() {
   // MEDIA_PRESETS.BOTH - Both camera and microphone required
   const requirements = MEDIA_PRESETS.BOTH;
 
-  // Send proctor event to backend API
-  const sendProctorEvent = async (
-    event: Omit<ProctorEvent, "examId" | "candidateId">,
-  ) => {
-    try {
-      const response = await fetch("/api/proctor/events", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          examId: examId || "default_exam",
-          candidateId,
-          ...event,
-        }),
-      });
-
-      if (!response.ok) {
-        console.error("Failed to send proctor event:", response.status);
-      } else {
-        const result = await response.json();
-        console.log(
-          "✅ Event sent:",
-          event.type,
-          "→ Event ID:",
-          result.event_id,
-        );
-      }
-    } catch (error) {
-      console.error("❌ Error sending proctor event:", error);
-    }
-  };
-
   // Handle proctor events from media monitor
   const handleProctorEvent = (type: string, payload: any) => {
     console.log("PROCTOR EVENT:", type, payload);
 
-    // Determine severity based on payload
-    let severity: SeverityLevel = "info";
-    if (payload.status === "off" || payload.lost || payload.exited) {
-      severity = "critical";
-    } else if (payload.blurred || payload.duration) {
-      severity = "warning";
-    }
-
-    // Send to backend
-    sendProctorEvent({
-      type: type as ProctorEventType,
-      payload,
-      severity,
-      timestamp: Date.now(),
-    });
+    // Emit event using the new system
+    emitProctorEvent(sessionId, candidateId, type, payload);
   };
 
+  // WebSocket connection setup
   useEffect(() => {
-    console.log("Exam started → proctoring ON");
+    if (!examId) return;
+
+    console.log("🔌 Initializing WebSocket connection...");
+
+    // Reset sequence for new session
+    resetSequence();
+
+    // Set up callbacks
+    onStateChange((state) => {
+      setConnectionState(state);
+      console.log(`📡 Connection state: ${state}`);
+    });
+
+    onMessage((data) => {
+      console.log("📨 Message from server:", data);
+    });
+
+    // Connect to WebSocket
+    connectSocket(sessionId, candidateId);
+
+    // Update queue count periodically
+    const queueInterval = setInterval(() => {
+      setQueuedEvents(getQueueSize());
+    }, 1000);
+
+    // Cleanup on unmount
+    return () => {
+      clearInterval(queueInterval);
+      disconnectSocket();
+      console.log("🔌 WebSocket disconnected");
+    };
+  }, [examId, sessionId, candidateId]);
+
+  // Media monitoring setup
+  useEffect(() => {
+    console.log("📹 Starting media monitoring...");
     console.log("Requirements:", requirements);
 
     let stopMonitoring: (() => void) | null = null;
@@ -149,13 +140,8 @@ export default function Exam() {
     const handleVisibilityChange = () => {
       if (document.hidden) {
         console.warn("⚠️ Tab blur detected");
-        sendProctorEvent({
-          type: "tab_blur",
-          payload: {
-            blurred: true,
-            timestamp: Date.now(),
-          },
-          severity: "warning",
+        emitProctorEvent(sessionId, candidateId, "tab_blur", {
+          blurred: true,
           timestamp: Date.now(),
         });
       }
@@ -165,14 +151,9 @@ export default function Exam() {
     const handleFullscreenChange = () => {
       if (!document.fullscreenElement) {
         console.warn("⚠️ Fullscreen exit detected");
-        sendProctorEvent({
-          type: "fullscreen_exit",
-          payload: {
-            exited: true,
-            reason: "user_action",
-          },
-          severity: "critical",
-          timestamp: Date.now(),
+        emitProctorEvent(sessionId, candidateId, "fullscreen_exit", {
+          exited: true,
+          reason: "user_action",
         });
       }
     };
@@ -223,19 +204,80 @@ export default function Exam() {
 
   return (
     <div className="min-h-screen p-8">
-      <h1 className="text-2xl font-bold mb-4">Exam In Progress</h1>
-      <p className="text-gray-600">Camera & microphone are being monitored.</p>
-
-      <div className="mt-6 bg-green-50 border border-green-200 rounded-lg p-4">
-        <p className="text-green-800 font-medium">✓ Media monitoring active</p>
-        <p className="text-sm text-green-600 mt-1">
-          Stream initialized and monitoring without re-requesting permissions
-        </p>
+      {/* Connection Status Bar */}
+      <div
+        className={`fixed top-0 left-0 right-0 p-2 text-center text-sm font-medium z-50 ${
+          connectionState === "connected"
+            ? "bg-green-500 text-white"
+            : connectionState === "reconnecting"
+              ? "bg-yellow-500 text-white"
+              : "bg-red-500 text-white"
+        }`}
+      >
+        {connectionState === "connected" && "🟢 Connected"}
+        {connectionState === "reconnecting" && "🟡 Reconnecting..."}
+        {connectionState === "disconnected" && "🔴 Disconnected"}
+        {queuedEvents > 0 && ` • ${queuedEvents} events queued`}
       </div>
 
-      <p className="mt-4 text-sm text-gray-500">
-        (Open DevTools → Console to see proctoring events)
-      </p>
+      <div className="mt-12">
+        <h1 className="text-2xl font-bold mb-4">Exam In Progress</h1>
+        <p className="text-gray-600">
+          Camera & microphone are being monitored.
+        </p>
+
+        <div className="mt-6 bg-green-50 border border-green-200 rounded-lg p-4">
+          <p className="text-green-800 font-medium">
+            ✓ Media monitoring active
+          </p>
+          <p className="text-sm text-green-600 mt-1">
+            Stream initialized and monitoring without re-requesting permissions
+          </p>
+          <p className="text-sm text-green-600 mt-1">
+            ✓ Events buffered locally (survives disconnection)
+          </p>
+          <p className="text-sm text-green-600 mt-1">
+            ✓ Auto-reconnect with event flushing enabled
+          </p>
+        </div>
+
+        <p className="mt-4 text-sm text-gray-500">
+          (Open DevTools → Console to see proctoring events)
+        </p>
+
+        {/* Connection Details */}
+        <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <h3 className="font-medium text-blue-800 mb-2">Connection Status</h3>
+          <div className="space-y-1 text-sm text-blue-700">
+            <p>
+              State:{" "}
+              <span className="font-mono font-semibold">{connectionState}</span>
+            </p>
+            <p>
+              Queued Events:{" "}
+              <span className="font-mono font-semibold">{queuedEvents}</span>
+            </p>
+            <p>
+              Session: <span className="font-mono text-xs">{sessionId}</span>
+            </p>
+          </div>
+        </div>
+
+        {/* Phase 2 Features */}
+        <div className="mt-6 p-4 bg-purple-50 border border-purple-200 rounded-lg">
+          <h3 className="font-medium text-purple-800 mb-2">
+            🎯 Phase 2: Event Buffering Active
+          </h3>
+          <ul className="space-y-1 text-sm text-purple-700">
+            <li>✅ Offline event queuing (max 500 events)</li>
+            <li>✅ Auto-reconnect with exponential backoff</li>
+            <li>✅ Batch flush on reconnect</li>
+            <li>✅ Event deduplication (UUID)</li>
+            <li>✅ Sequence tracking for gap detection</li>
+            <li>✅ No event loss on network drops</li>
+          </ul>
+        </div>
+      </div>
     </div>
   );
 }
