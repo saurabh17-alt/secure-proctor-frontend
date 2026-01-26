@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { useParams } from "react-router-dom";
 import {
   startMediaMonitor,
@@ -20,6 +20,7 @@ import {
   onMessage,
 } from "../../proctoring/socket/proctorSocket";
 import { getQueueSize } from "../../proctoring/events/eventQueue";
+import { useAIProcessing } from "../../hooks/useAIProcessing";
 
 export default function Exam() {
   const { examId } = useParams<{ examId: string }>();
@@ -28,6 +29,7 @@ export default function Exam() {
   const [connectionState, setConnectionState] =
     useState<string>("disconnected");
   const [queuedEvents, setQueuedEvents] = useState<number>(0);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   // Generate stable candidateId that doesn't change on re-render
   const candidateId = useMemo(
@@ -35,6 +37,14 @@ export default function Exam() {
     [],
   );
   const sessionId = examId || "default_exam";
+
+  // ⚙️ AI Processing Hook
+  const aiProcessing = useAIProcessing({
+    examId: sessionId,
+    candidateId,
+    enabled: true, // Enable AI processing
+    fps: 2, // Send 2 frames per second
+  });
 
   // ⚙️ CONFIGURE REQUIREMENTS HERE
   // MEDIA_PRESETS.CAMERA_ONLY - Only camera required
@@ -121,6 +131,16 @@ export default function Exam() {
         }
 
         console.log("Media stream initialized successfully");
+
+        // Connect video element to AI processing
+        if (videoRef.current && stream) {
+          videoRef.current.srcObject = stream;
+          videoRef.current
+            .play()
+            .catch((err) => console.error("Video play error:", err));
+          aiProcessing.setVideoElement(videoRef.current);
+        }
+
         setIsInitializing(false);
 
         // Start monitoring with event handler
@@ -231,13 +251,23 @@ export default function Exam() {
         {connectionState === "reconnecting" && "🟡 Reconnecting..."}
         {connectionState === "disconnected" && "🔴 Disconnected"}
         {queuedEvents > 0 && ` • ${queuedEvents} events queued`}
+        {aiProcessing.connected && " • 🤖 AI Active"}
       </div>
 
       <div className="mt-12">
         <h1 className="text-2xl font-bold mb-4">Exam In Progress</h1>
         <p className="text-gray-600">
-          Camera & microphone are being monitored.
+          Camera & microphone are being monitored with AI proctoring.
         </p>
+
+        {/* Hidden video element for AI processing */}
+        <video
+          ref={videoRef}
+          style={{ display: "none" }}
+          autoPlay
+          playsInline
+          muted
+        />
 
         <div className="mt-6 bg-green-50 border border-green-200 rounded-lg p-4">
           <p className="text-green-800 font-medium">
@@ -252,7 +282,83 @@ export default function Exam() {
           <p className="text-sm text-green-600 mt-1">
             ✓ Auto-reconnect with event flushing enabled
           </p>
+          <p className="text-sm text-green-600 mt-1">
+            {aiProcessing.connected
+              ? "✓ AI proctoring connected (2 FPS)"
+              : "⏳ AI proctoring connecting..."}
+          </p>
         </div>
+
+        {/* AI Status Display */}
+        {aiProcessing.lastResult && (
+          <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <p className="text-blue-800 font-medium mb-2">
+              🤖 AI Processing Status
+            </p>
+            <div className="text-sm text-blue-700 space-y-1">
+              <p>
+                Face Signal:{" "}
+                <span className="font-mono">
+                  {aiProcessing.lastResult.face_signal}
+                </span>
+              </p>
+              <p>
+                Pose Signal:{" "}
+                <span className="font-mono">
+                  {aiProcessing.lastResult.pose_signal}
+                </span>
+              </p>
+              {aiProcessing.lastResult.object_signals &&
+                aiProcessing.lastResult.object_signals.length > 0 && (
+                  <p className="text-orange-600 font-semibold">
+                    ⚠️ Objects:{" "}
+                    {aiProcessing.lastResult.object_signals.join(", ")}
+                  </p>
+                )}
+              {aiProcessing.lastResult.debug && (
+                <>
+                  <p>Face Count: {aiProcessing.lastResult.debug.face_count}</p>
+                  {aiProcessing.lastResult.debug.yaw !== undefined && (
+                    <p>
+                      Head Yaw: {aiProcessing.lastResult.debug.yaw.toFixed(1)}°
+                    </p>
+                  )}
+                  {aiProcessing.lastResult.debug.pitch !== undefined && (
+                    <p>
+                      Head Pitch:{" "}
+                      {aiProcessing.lastResult.debug.pitch.toFixed(1)}°
+                    </p>
+                  )}
+                  {aiProcessing.lastResult.debug.forbidden_objects > 0 && (
+                    <p className="text-red-600 font-semibold">
+                      🚨 Forbidden Objects:{" "}
+                      {aiProcessing.lastResult.debug.forbidden_objects}
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* AI Violations Display */}
+        {aiProcessing.violations.length > 0 && (
+          <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-4">
+            <p className="text-red-800 font-medium mb-2">
+              ⚠️ AI Violations Detected
+            </p>
+            <div className="text-sm text-red-700 space-y-2">
+              {aiProcessing.violations.slice(-3).map((v, idx) => (
+                <div key={idx} className="border-l-2 border-red-400 pl-2">
+                  <p className="font-semibold">
+                    {v.type} [{v.level}]
+                  </p>
+                  <p className="text-xs">Duration: {v.duration.toFixed(1)}s</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <p className="mt-4 text-sm text-gray-500">
           (Open DevTools → Console to see proctoring events)
