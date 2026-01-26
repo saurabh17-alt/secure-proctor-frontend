@@ -136,14 +136,26 @@ export default function Exam() {
 
     init();
 
-    // Monitor tab visibility (tab switching)
+    // Monitor tab visibility (tab switching) - with debouncing
+    let tabBlurTimer: ReturnType<typeof setTimeout> | null = null;
     const handleVisibilityChange = () => {
       if (document.hidden) {
-        console.warn("⚠️ Tab blur detected");
-        emitProctorEvent(sessionId, candidateId, "tab_blur", {
-          blurred: true,
-          timestamp: Date.now(),
-        });
+        // Debounce: wait 500ms before emitting
+        // Prevents spam from rapid tab switching
+        if (tabBlurTimer) clearTimeout(tabBlurTimer);
+        tabBlurTimer = setTimeout(() => {
+          console.warn("⚠️ Tab blur detected (debounced)");
+          emitProctorEvent(sessionId, candidateId, "tab_blur", {
+            blurred: true,
+            timestamp: Date.now(),
+          });
+        }, 500);
+      } else {
+        // Tab returned - cancel pending event
+        if (tabBlurTimer) {
+          clearTimeout(tabBlurTimer);
+          tabBlurTimer = null;
+        }
       }
     };
 
@@ -165,6 +177,7 @@ export default function Exam() {
     // Cleanup: stop monitoring AND cleanup stream when exam truly ends
     return () => {
       console.log("Exam ended → stopping monitoring + cleaning stream");
+      if (tabBlurTimer) clearTimeout(tabBlurTimer);
       stopMonitoring?.();
       cleanupMediaStream();
       document.removeEventListener("visibilitychange", handleVisibilityChange);

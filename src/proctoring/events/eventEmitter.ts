@@ -6,6 +6,11 @@
  * - Tab check
  * - Fullscreen
  * - Network status
+ *
+ * Features:
+ * - Throttling: Prevents event spam (max 1 per type per interval)
+ * - Deduplication: UUID-based
+ * - Queuing: Survives disconnections
  */
 
 import { enqueueEvent } from "./eventQueue";
@@ -13,6 +18,18 @@ import { sendEvent } from "../socket/proctorSocket";
 import { type ProctorEvent } from "./types";
 
 let sequence = 0;
+
+// Throttling configuration (milliseconds)
+const THROTTLE_INTERVALS: Record<string, number> = {
+  camera_status: 1000, // Max 1 per second
+  mic_status: 1000, // Max 1 per second
+  tab_blur: 2000, // Max 1 per 2 seconds (debounced)
+  fullscreen_exit: 1000, // Max 1 per second
+  stream_lost: 5000, // Max 1 per 5 seconds
+};
+
+// Track last emission time per event type
+const lastEmitTime: Record<string, number> = {};
 
 /**
  * Generate UUID v4
@@ -27,7 +44,26 @@ function generateUUID(): string {
 }
 
 /**
- * Emit proctor event
+ * Check if event should be throttled
+ */
+function shouldThrottle(type: string): boolean {
+  const throttleMs = THROTTLE_INTERVALS[type] || 0;
+  if (throttleMs === 0) return false;
+
+  const lastTime = lastEmitTime[type];
+  const now = Date.now();
+
+  if (!lastTime || now - lastTime >= throttleMs) {
+    lastEmitTime[type] = now;
+    return false;
+  }
+
+  console.debug(`⏱️ Throttled: ${type} (${now - lastTime}ms since last)`);
+  return true;
+}
+
+/**
+ * Emit proctor event with throttling
  * This is the ONLY function to use for emitting events
  */
 export function emitProctorEvent(
@@ -36,6 +72,11 @@ export function emitProctorEvent(
   type: string,
   payload: Record<string, any>,
 ): void {
+  // Check throttling
+  if (shouldThrottle(type)) {
+    return; // Skip this event
+  }
+
   const event: ProctorEvent = {
     event_id: generateUUID(),
     session_id: sessionId,
