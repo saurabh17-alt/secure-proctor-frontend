@@ -22,7 +22,8 @@ frontend/
 │   │   ├── candidate/
 │   │   │   ├── JoinExam.tsx             # Exam entry point for candidates
 │   │   │   ├── SystemCheck.tsx          # System verification page
-│   │   │   └── Exam.tsx                 # Main exam page with proctoring
+│   │   │   ├── Exam.tsx                 # Main exam page with proctoring
+│   │   │   └── TestExam.tsx             # ⭐ Test page with on-screen logs
 │   │   │
 │   │   └── admin/
 │   │       └── Dashboard.tsx            # Admin dashboard
@@ -80,30 +81,49 @@ frontend/
 5. **Flexible Requirements:** Easy configuration per exam type
 6. **Error Clarity:** Specific error messages for each device
 
-### 2. Routing System
+### 2. Event Buffering & Reconnection (Phase 2)
+
+- ✅ **Client-side event buffering** - Events stored locally during disconnection
+- ✅ **Automatic reconnection** - Exponential backoff strategy
+- ✅ **Batch submission** - Buffered events sent on reconnect
+- ✅ **No event loss** - All events preserved during network issues
+- ✅ **Connection status UI** - Visual indicators for connection state
+
+### 3. Test Page (Phase 3) ⭐
+
+- ✅ **TestExam.tsx** - Dedicated testing page at `/test-exam/:examId`
+- ✅ **Start/Stop controls** - Manual test control buttons
+- ✅ **On-screen logs** - Live color-coded event display (info/warning/error/violation)
+- ✅ **Permission denial testing** - Visual warnings when camera/mic blocked
+- ✅ **Real-time violation display** - Shows backend violation warnings/termination
+- ✅ **Scrollable log panel** - 600px height with auto-scroll to latest
+
+### 4. Routing System
 
 - ✅ React Router setup with layouts
-- ✅ Candidate routes: `/join-exam`, `/system-check`, `/exam/:examId`
+- ✅ Candidate routes: `/join-exam`, `/system-check`, `/exam/:examId`, `/test-exam/:examId`
 - ✅ Admin routes: `/admin`
 - ✅ Layout components with headers and footers
 - ✅ Dynamic exam IDs for multiple exams
 
 #### **Available Routes**
 
-| Route           | Description                    | Parameters                        |
-| --------------- | ------------------------------ | --------------------------------- |
-| `/join-exam`    | Exam entry point               | None                              |
-| `/system-check` | Pre-exam system check          | None                              |
-| `/exam/:examId` | Main exam page with proctoring | `examId` - Unique exam identifier |
-| `/admin`        | Admin dashboard                | None                              |
+| Route                | Description                    | Parameters                        |
+| -------------------- | ------------------------------ | --------------------------------- |
+| `/join-exam`         | Exam entry point               | None                              |
+| `/system-check`      | Pre-exam system check          | None                              |
+| `/exam/:examId`      | Main exam page with proctoring | `examId` - Unique exam identifier |
+| `/test-exam/:examId` | Test page with on-screen logs  | `examId` - Unique exam identifier |
+| `/admin`             | Admin dashboard                | None                              |
 
 **Example URLs:**
 
 - http://localhost:5173/exam/exam_123
+- http://localhost:5173/test-exam/test_exam_123
 - http://localhost:5173/exam/midterm_2026
 - http://localhost:5173/exam/final_exam
 
-### 3. Backend Integration
+### 5. Backend Integration
 
 - ✅ API integration for proctor events
 - ✅ Vite proxy configuration (no CORS issues)

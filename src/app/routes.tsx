@@ -5,6 +5,7 @@ import Dashboard from "../pages/admin/Dashboard";
 import CandidateLayout from "../components/layout/CandidateLayout";
 import AdminLayout from "../components/layout/AdminLayout";
 import Exam from "../pages/candidate/Exam";
+import TestExam from "../pages/candidate/TestExam";
 
 export default function AppRoutes() {
   return (
@@ -14,6 +15,7 @@ export default function AppRoutes() {
         <Route path="/join-exam" element={<JoinExam />} />
         <Route path="/system-check" element={<SystemCheck />} />
         <Route path="/exam/:examId" element={<Exam />} />
+        <Route path="/test-exam/:examId" element={<TestExam />} />
       </Route>
 
       {/* Admin Routes */}
