@@ -1,1 +1,24 @@
+/* Tailwind CSS v4 – single import */
 @import "tailwindcss";
+
+/* Global styles (optional) */
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    "Helvetica Neue",
+    Arial,
+    "Noto Sans",
+    sans-serif;
+  background-color: #f9fafb;
+}
