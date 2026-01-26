@@ -1,14 +1,21 @@
 # Secure Proctor - Frontend
 
-A production-ready online proctoring system built with React, TypeScript, and Vite.
+Production-ready online proctoring system built with React, TypeScript, and Vite.
+
+---
 
 ## 🚀 Tech Stack
 
-- **Framework:** React 18 with TypeScript
-- **Build Tool:** Vite
-- **Styling:** Tailwind CSS
-- **Routing:** React Router DOM
-- **Media:** MediaStream API (Camera & Microphone)
+- **Framework:** React 19 with TypeScript
+- **Build Tool:** Vite 7.2.4
+- **Styling:** Tailwind CSS 4.1.18
+- **Routing:** React Router DOM 7.13.0
+- **State Management:** Zustand 5.0.10
+- **HTTP Client:** Axios 1.13.3
+- **Media:** MediaStream API (Webcam & Microphone)
+- **Node:** 18+
+
+---
 
 ## 📁 Project Structure
 
@@ -16,559 +23,663 @@ A production-ready online proctoring system built with React, TypeScript, and Vi
 frontend/
 ├── src/
 │   ├── app/
-│   │   └── routes.tsx                    # Application routing configuration
+│   │   └── routes.tsx               # Application routing
 │   │
 │   ├── pages/
-│   │   ├── candidate/
-│   │   │   ├── JoinExam.tsx             # Exam entry point for candidates
-│   │   │   ├── SystemCheck.tsx          # System verification page
-│   │   │   ├── Exam.tsx                 # Main exam page with proctoring
-│   │   │   └── TestExam.tsx             # ⭐ Test page with on-screen logs
+│   │   ├── candidate/              # Candidate pages
+│   │   │   ├── JoinExam.tsx        # Exam entry
+│   │   │   ├── SystemCheck.tsx     # Camera/mic verification
+│   │   │   └── Exam.tsx            # Main exam page + AI proctoring
 │   │   │
-│   │   └── admin/
-│   │       └── Dashboard.tsx            # Admin dashboard
+│   │   └── admin/                  # Admin pages
+│   │       └── Dashboard.tsx       # Admin monitoring dashboard
 │   │
 │   ├── components/
 │   │   └── layout/
-│   │       ├── CandidateLayout.tsx      # Layout wrapper for candidates
-│   │       └── AdminLayout.tsx          # Layout wrapper for admins
+│   │       ├── CandidateLayout.tsx # Candidate layout wrapper
+│   │       └── AdminLayout.tsx     # Admin layout wrapper
 │   │
 │   ├── proctoring/
 │   │   └── core/
-│   │       ├── mediaConfig.ts           # Media requirements configuration
-│   │       ├── streamManager.ts         # Global stream lifecycle management
-│   │       └── mediaMonitor.ts          # Production-ready media monitoring
+│   │       ├── mediaConfig.ts      # Media requirements config
+│   │       ├── streamManager.ts    # Global stream lifecycle
+│   │       └── mediaMonitor.ts     # Real-time media monitoring
 │   │
 │   ├── hooks/
-│   │   └── useSystemCheck.ts            # System check custom hook
+│   │   └── useSystemCheck.ts       # System verification hook
 │   │
-│   ├── App.tsx                          # Main app component
-│   ├── main.tsx                         # Application entry point
-│   └── index.css                        # Global styles with Tailwind
+│   ├── App.tsx                     # Main app component
+│   ├── main.tsx                    # Entry point
+│   └── index.css                   # Global styles + Tailwind
 │
-├── public/                               # Static assets
-├── MEDIA_REQUIREMENTS.md                 # Documentation for media configuration
-└── package.json                          # Dependencies and scripts
+├── public/                         # Static assets
+├── package.json
+├── vite.config.ts
+├── tailwind.config.js
+└── tsconfig.json
 ```
 
-## ✨ Features Implemented
+---
 
-### 1. Proctoring System (Production-Ready)
-
-#### **Media Stream Management**
-
-- ✅ Global stream to prevent camera blinking
-- ✅ Separate camera and microphone requests (independent failure handling)
-- ✅ Configurable requirements (camera only, audio only, or both)
-- ✅ Stream reuse and proper cleanup
-- ✅ No re-requesting permissions during monitoring
-
-#### **Media Monitoring**
-
-- ✅ Real-time camera and microphone status tracking
-- ✅ Only monitors required devices
-- ✅ No permission queries in monitoring loop (Safari compatible)
-- ✅ Single event per state change (no duplicate events)
-- ✅ Accurate initial state detection
-- ✅ Independent device monitoring (one failing doesn't affect the other)
-
-#### **Key Improvements Over Standard Implementations**
-
-1. **No Camera Blinking:** Stream initialized once and reused
-2. **Safari Compatible:** No permission queries in interval loop
-3. **Clean Events:** One event per state change with timestamps
-4. **Production Safe:** Stream cleanup only on exam end, not on component re-render
-5. **Flexible Requirements:** Easy configuration per exam type
-6. **Error Clarity:** Specific error messages for each device
-
-### 2. Event Buffering & Reconnection (Phase 2)
-
-- ✅ **Client-side event buffering** - Events stored locally during disconnection
-- ✅ **Automatic reconnection** - Exponential backoff strategy
-- ✅ **Batch submission** - Buffered events sent on reconnect
-- ✅ **No event loss** - All events preserved during network issues
-- ✅ **Connection status UI** - Visual indicators for connection state
-
-### 3. Test Page (Phase 3) ⭐
-
-- ✅ **TestExam.tsx** - Dedicated testing page at `/test-exam/:examId`
-- ✅ **Start/Stop controls** - Manual test control buttons
-- ✅ **On-screen logs** - Live color-coded event display (info/warning/error/violation)
-- ✅ **Permission denial testing** - Visual warnings when camera/mic blocked
-- ✅ **Real-time violation display** - Shows backend violation warnings/termination
-- ✅ **Scrollable log panel** - 600px height with auto-scroll to latest
-
-### 4. Routing System
-
-- ✅ React Router setup with layouts
-- ✅ Candidate routes: `/join-exam`, `/system-check`, `/exam/:examId`, `/test-exam/:examId`
-- ✅ Admin routes: `/admin`
-- ✅ Layout components with headers and footers
-- ✅ Dynamic exam IDs for multiple exams
-
-#### **Available Routes**
-
-| Route                | Description                    | Parameters                        |
-| -------------------- | ------------------------------ | --------------------------------- |
-| `/join-exam`         | Exam entry point               | None                              |
-| `/system-check`      | Pre-exam system check          | None                              |
-| `/exam/:examId`      | Main exam page with proctoring | `examId` - Unique exam identifier |
-| `/test-exam/:examId` | Test page with on-screen logs  | `examId` - Unique exam identifier |
-| `/admin`             | Admin dashboard                | None                              |
-
-**Example URLs:**
-
-- http://localhost:5173/exam/exam_123
-- http://localhost:5173/test-exam/test_exam_123
-- http://localhost:5173/exam/midterm_2026
-- http://localhost:5173/exam/final_exam
-
-### 5. Backend Integration
-
-- ✅ API integration for proctor events
-- ✅ Vite proxy configuration (no CORS issues)
-- ✅ Type-safe event schemas matching backend
-- ✅ Real-time event sending to backend API
-- ✅ Tab blur detection and reporting
-- ✅ Fullscreen exit detection and reporting
-
-#### **Proctor Events Sent to Backend**
-
-The frontend automatically sends these events to the backend:
-
-1. **Camera Status** (`camera_status`)
-   - Triggered when camera turns on/off
-   - Severity: `critical` if off, `info` if on
-
-2. **Microphone Status** (`mic_status`)
-   - Triggered when microphone turns on/off
-   - Severity: `critical` if off, `info` if on
-
-3. **Tab Blur** (`tab_blur`)
-   - Triggered when candidate switches tabs
-   - Severity: `warning`
-
-4. **Fullscreen Exit** (`fullscreen_exit`)
-   - Triggered when candidate exits fullscreen
-   - Severity: `critical`
-
-5. **Stream Lost** (`stream_lost`)
-   - Triggered when media stream disconnects
-   - Severity: `critical`
-
-**Event Payload Example:**
-
-```typescript
-{
-  examId: "exam_123",
-  candidateId: "candidate_abc123",
-  type: "camera_status",
-  payload: { enabled: true, deviceId: "camera_001" },
-  severity: "info",
-  timestamp: 1769433337465
-}
-```
-
-### 4. UI/UX
-
-- ✅ Tailwind CSS fully configured
-- ✅ Responsive design
-- ✅ Loading states
-- ✅ Error handling with user-friendly messages
-- ✅ Retry functionality for media errors
-
-## 🎯 Media Requirements Configuration
-
-The system supports three media requirement modes:
-
-### **CAMERA_ONLY**
-
-```typescript
-const requirements = MEDIA_PRESETS.CAMERA_ONLY;
-```
-
-- Camera required, microphone optional
-- Use for: Written exams with visual monitoring
-
-### **AUDIO_ONLY**
-
-```typescript
-const requirements = MEDIA_PRESETS.AUDIO_ONLY;
-```
-
-- Microphone required, camera optional
-- Use for: Oral exams or voice interviews
-
-### **BOTH**
-
-```typescript
-const requirements = MEDIA_PRESETS.BOTH;
-```
-
-- Both camera and microphone required
-- Use for: High-stakes certification exams
-
-**Configuration Location:** [`src/pages/candidate/Exam.tsx`](src/pages/candidate/Exam.tsx#L24)
-
-See [MEDIA_REQUIREMENTS.md](MEDIA_REQUIREMENTS.md) for detailed documentation.
-
-## 🔧 Setup & Installation
+## 🛠️ Installation
 
 ### Prerequisites
 
 - Node.js 18+
 - npm or yarn
-- Backend API running (see [backend/README.md](../backend/README.md))
 
-### Install Dependencies
+### Setup
 
 ```bash
 cd frontend
+
+# Install dependencies
 npm install
+
+# Start development server
+npm run dev
+
+# Build for production
+npm run build
+
+# Preview production build
+npm run preview
 ```
 
-### Configure Backend Connection
-
-The frontend uses Vite proxy to connect to the backend. Configuration is in [`vite.config.ts`](vite.config.ts):
-
-```typescript
-server: {
-  proxy: {
-    '/api': {
-      target: 'http://localhost:8000',
-      changeOrigin: true,
-    },
-    '/ws': {
-      target: 'ws://localhost:8000',
-      ws: true,
-      changeOrigin: true,
-    },
-  },
-}
-```
-
-**Make sure your backend is running on port 8000!**
-
-### Run Development Server
+### Development Server
 
 ```bash
 npm run dev
 ```
 
-**Frontend will run at:** http://localhost:5173
+Access at: http://localhost:5173
 
-### Test the Application
+---
 
-1. **Start Backend** (in separate terminal):
+## 🎨 Pages & Routes
 
-   ```bash
-   cd ../backend
-   uvicorn app.main:app --reload
-   ```
+### Candidate Routes
 
-2. **Access Exam Page:**
-   - Navigate to: http://localhost:5173/exam/exam_123
-   - Allow camera and microphone permissions
-   - Check browser console for: `✅ Event sent: camera_status → Event ID: 1`
+#### `/join-exam/:examId`
+Exam entry point where candidates:
+- Enter their name
+- Enter exam ID
+- Start exam
 
-3. **Test Event Detection:**
-   - Switch tabs → `tab_blur` event sent
-   - Exit fullscreen → `fullscreen_exit` event sent
-   - Disable camera → `camera_status` with severity `critical`
+#### `/system-check/:examId`
+System verification page that checks:
+- Camera permission & functionality
+- Microphone permission & functionality
+- Browser compatibility
+- Network connectivity
 
-4. **Verify in Backend:**
-   - Check backend terminal for: `INFO: Event ingested: camera_status...`
-   - Or visit: http://localhost:8000/docs (Swagger UI)
-   - Query events: `GET /api/proctor/events?exam_id=exam_123`
+After passing, navigates to exam page.
 
-### Build for Production
+#### `/exam/:examId`
+Main exam page with AI proctoring:
+- Live camera feed (top-right corner)
+- Real-time AI detection status
+- Head pose tracking display (yaw/pitch angles)
+- Exam content area
+- Automatic violation detection
+
+**Features:**
+- No camera blinking (stream initialized once)
+- Real-time face detection
+- Head pose monitoring
+- Object detection (phone, book)
+- Event logging to backend
+
+### Admin Routes
+
+#### `/admin/dashboard/:examId`
+Admin monitoring dashboard:
+- List of active candidates
+- Real-time event feed
+- Violation alerts
+- Connection status for each candidate
+
+**Features:**
+- WebSocket connection to backend
+- Real-time event streaming
+- Candidate connection/disconnection tracking
+- Violation severity indicators
+
+---
+
+## 🎥 Media Management
+
+### Configuration (`proctoring/core/mediaConfig.ts`)
+
+```typescript
+export const MEDIA_REQUIREMENTS = {
+  camera: true,      // Camera required
+  microphone: false, // Microphone optional
+  screen: false      // Screen share not required
+};
+```
+
+### Stream Manager (`proctoring/core/streamManager.ts`)
+
+**Global Stream Lifecycle:**
+- Initializes stream once at exam start
+- Reuses stream throughout exam
+- Cleans up only on exam end
+- No camera blinking
+
+**Usage:**
+```typescript
+import { initMediaStream, cleanupMediaStream, getStream } from '@/proctoring/core/streamManager';
+
+// Initialize (call once in Exam.tsx)
+const stream = await initMediaStream();
+
+// Get existing stream
+const currentStream = getStream();
+
+// Cleanup (call in useEffect cleanup)
+cleanupMediaStream();
+```
+
+### Media Monitor (`proctoring/core/mediaMonitor.ts`)
+
+**Real-Time Monitoring:**
+- Monitors camera and mic status every 1.5s
+- Detects device disconnection
+- Detects stream track ending
+- Emits clean events (one per state change)
+- No duplicate events
+- Safari compatible (no permission queries in loop)
+
+**Usage:**
+```typescript
+import { startMediaMonitoring, stopMediaMonitoring } from '@/proctoring/core/mediaMonitor';
+
+// Start monitoring
+startMediaMonitoring({
+  stream,
+  requiredDevices: ['camera', 'microphone'],
+  onEvent: (event) => {
+    console.log('Media event:', event);
+    // Send to backend
+  }
+});
+
+// Stop monitoring (does NOT kill stream)
+stopMediaMonitoring();
+```
+
+**Events Emitted:**
+```typescript
+// Camera status
+{
+  status: "on" | "off",
+  device: "camera",
+  timestamp: 1706234567890
+}
+
+// Microphone status
+{
+  status: "on" | "off",
+  device: "microphone",
+  timestamp: 1706234567890
+}
+```
+
+---
+
+## 🤖 AI Proctoring Integration
+
+### Frame Capture & Sending
+
+In `Exam.tsx`:
+
+```typescript
+// Capture frame from video element
+const captureFrame = () => {
+  const canvas = document.createElement('canvas');
+  canvas.width = 640;
+  canvas.height = 480;
+  const ctx = canvas.getContext('2d');
+  ctx?.drawImage(videoRef.current, 0, 0, 640, 480);
+  return canvas.toDataURL('image/jpeg', 0.8); // Base64 JPEG
+};
+
+// Send to backend via WebSocket (every 333ms = 3 FPS)
+useEffect(() => {
+  const interval = setInterval(() => {
+    const frame = captureFrame();
+    websocket.send(JSON.stringify({
+      action: 'ai_frame',
+      session_id: sessionId,
+      frame: frame
+    }));
+  }, 333);
+  
+  return () => clearInterval(interval);
+}, []);
+```
+
+### Receiving AI Violations
+
+```typescript
+websocket.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+  
+  if (data.type === 'ai_violation') {
+    // Display violation to candidate
+    setViolations(prev => [...prev, data.violation]);
+    
+    // Show alert if critical
+    if (data.violation.level === 'critical') {
+      alert(`Violation: ${data.violation.type}`);
+    }
+  }
+};
+```
+
+### Display AI Status
+
+```tsx
+{/* AI Detection Status */}
+<div className="ai-status">
+  <div>Face: {faceStatus}</div>
+  <div>Head Pose: yaw={yaw.toFixed(1)}° pitch={pitch.toFixed(1)}°</div>
+  <div>Violations: {violations.length}</div>
+</div>
+```
+
+---
+
+## 🔌 API Integration
+
+### REST API (`axios`)
+
+#### Send Event
+
+```typescript
+import axios from 'axios';
+
+const sendEvent = async (event: ProctorEvent) => {
+  try {
+    const response = await axios.post('http://localhost:8000/api/proctor/events', {
+      examId: 'exam123',
+      candidateId: 'user456',
+      type: 'camera_off',
+      severity: 'critical',
+      payload: { device: 'camera', status: 'off' },
+      timestamp: Date.now()
+    });
+    
+    console.log('Event sent:', response.data);
+  } catch (error) {
+    console.error('Failed to send event:', error);
+  }
+};
+```
+
+#### Get Events
+
+```typescript
+const getEvents = async (examId: string) => {
+  try {
+    const response = await axios.get(
+      `http://localhost:8000/api/proctor/events?exam_id=${examId}&limit=50`
+    );
+    
+    return response.data; // Array of events
+  } catch (error) {
+    console.error('Failed to fetch events:', error);
+  }
+};
+```
+
+### WebSocket
+
+#### Connect
+
+```typescript
+const connectWebSocket = (examId: string, candidateId: string) => {
+  const ws = new WebSocket(`ws://localhost:8000/ws/proctor/${examId}/${candidateId}`);
+  
+  ws.onopen = () => {
+    console.log('WebSocket connected');
+  };
+  
+  ws.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    console.log('Received:', data);
+  };
+  
+  ws.onerror = (error) => {
+    console.error('WebSocket error:', error);
+  };
+  
+  ws.onclose = () => {
+    console.log('WebSocket disconnected');
+    // Implement reconnection logic
+  };
+  
+  return ws;
+};
+```
+
+#### Send Event
+
+```typescript
+ws.send(JSON.stringify({
+  action: 'event',
+  event_id: `evt_${Date.now()}`,
+  session_id: sessionId,
+  user_id: candidateId,
+  type: 'tab_switch',
+  payload: { url: window.location.href },
+  timestamp: Date.now(),
+  sequence: eventSequence++
+}));
+```
+
+#### Send AI Frame
+
+```typescript
+ws.send(JSON.stringify({
+  action: 'ai_frame',
+  session_id: sessionId,
+  frame: base64ImageData // data:image/jpeg;base64,...
+}));
+```
+
+---
+
+## 🧪 Testing
+
+### Manual Testing
+
+#### 1. Test System Check
+
+1. Go to http://localhost:5173/system-check/exam123
+2. Allow camera permission
+3. Allow microphone permission
+4. Verify camera preview shows
+5. Verify microphone level indicator works
+6. Click "Start Exam"
+
+#### 2. Test Exam Page (AI Proctoring)
+
+1. Go to http://localhost:5173/exam/exam123
+2. **No Face Test:**
+   - Move out of camera view
+   - Expected: "No face detected" after ~2 seconds
+3. **Multiple Faces Test:**
+   - Have another person enter view
+   - Expected: "Multiple faces detected" after ~2.5 seconds
+4. **Looking Away Test:**
+   - Turn head 30-40° left or right
+   - Expected: "Looking away" after ~5 seconds
+   - Check head pose angles displayed on screen
+5. **Object Detection Test:**
+   - Hold phone in view: Expected detection in ~1.3 seconds
+   - Hold book in view: Expected detection in ~1.5 seconds
+
+#### 3. Test Admin Dashboard
+
+1. Go to http://localhost:5173/admin/dashboard/exam123
+2. Open candidate exam in another window
+3. Verify events appear in admin dashboard in real-time
+4. Trigger violations and verify they show up
+
+### Network Testing
+
+#### Test Offline Buffering
+
+1. Start exam
+2. Disconnect network (disable WiFi)
+3. Trigger events (camera off, tab switch)
+4. Reconnect network
+5. Verify buffered events sent to backend
+
+---
+
+## 📊 Event Types Handled
+
+### Media Events
+- `camera_on` - Camera enabled
+- `camera_off` - Camera disabled
+- `mic_on` - Microphone enabled
+- `mic_off` - Microphone disabled
+- `stream_error` - Media stream error
+
+### Behavioral Events
+- `tab_switch` - Switched browser tab
+- `window_blur` - Left exam window
+- `fullscreen_exit` - Exited fullscreen mode
+- `copy_paste` - Copy/paste detected (if implemented)
+
+### AI Violations (from backend)
+- `ai_no_face` - No face detected
+- `ai_multiple_faces` - Multiple faces detected
+- `ai_looking_away` - Head turned away
+- `ai_phone_detected` - Phone visible
+- `ai_book_detected` - Book/paper visible
+
+---
+
+## 🎨 Styling
+
+### Tailwind CSS
+
+**Configuration** (`tailwind.config.js`):
+```javascript
+export default {
+  content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
+  theme: {
+    extend: {
+      colors: {
+        primary: '#3b82f6',
+        secondary: '#10b981',
+        danger: '#ef4444',
+        warning: '#f59e0b',
+      },
+    },
+  },
+  plugins: [],
+};
+```
+
+**Usage:**
+```tsx
+<div className="bg-white p-4 rounded-lg shadow-md">
+  <h1 className="text-2xl font-bold text-gray-900">
+    Exam Title
+  </h1>
+  <button className="bg-primary text-white px-4 py-2 rounded hover:bg-blue-600">
+    Start Exam
+  </button>
+</div>
+```
+
+### Custom Styles
+
+Global styles in `index.css`:
+```css
+/* Custom scrollbar */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #cbd5e0;
+  border-radius: 4px;
+}
+```
+
+---
+
+## 🔍 Process Flow
+
+### Exam Start Flow
+
+```
+1. Candidate → /join-exam/:examId
+   ↓
+2. Enter name + exam ID
+   ↓
+3. Click "Start" → Navigate to /system-check/:examId
+   ↓
+4. System Check:
+   - Request camera permission
+   - Request microphone permission
+   - Test camera feed
+   - Test microphone level
+   ↓
+5. Click "Start Exam" → Navigate to /exam/:examId
+   ↓
+6. Exam Page:
+   - Initialize global media stream
+   - Start media monitoring
+   - Connect WebSocket
+   - Start AI frame capture (3 FPS)
+   - Display exam content
+```
+
+### AI Detection Flow
+
+```
+Exam.tsx → captureFrame() (every 333ms)
+    ↓
+Base64 JPEG (640x480)
+    ↓
+WebSocket.send({action: "ai_frame", frame: "data:image/..."})
+    ↓
+Backend receives frame
+    ↓
+AI Processing:
+├─ Face Detection (MediaPipe)
+├─ Head Pose (MediaPipe)
+└─ Object Detection (YOLOv8)
+    ↓
+Violations detected → Signal Aggregator
+    ↓
+WebSocket.send({type: "ai_violation", violation: {...}})
+    ↓
+Frontend receives violation
+    ↓
+Display to candidate + Log to backend
+```
+
+### Event Logging Flow
+
+```
+User Action (camera off, tab switch, etc.)
+    ↓
+Create Event Object
+    ↓
+Check WebSocket Connection
+    ↓
+├─ Connected → Send immediately
+└─ Disconnected → Buffer locally
+    ↓
+On Reconnect → Send buffered events in batch
+    ↓
+Backend stores in database
+    ↓
+Backend broadcasts to admin dashboard
+```
+
+---
+
+## 🛠️ Troubleshooting
+
+### Camera Not Working
+
+1. Check browser permissions (chrome://settings/content/camera)
+2. Verify camera is not used by another app
+3. Check console for errors
+4. Try different browser
+
+### WebSocket Connection Failed
+
+1. Verify backend is running (http://localhost:8000/health)
+2. Check WebSocket URL format
+3. Check CORS settings in backend
+4. Check browser console for errors
+
+### AI Detection Not Working
+
+1. Verify backend AI models loaded (check backend logs)
+2. Verify frames being sent (check network tab, WebSocket frames)
+3. Check frame size (should be 640x480)
+4. Verify base64 encoding is correct
+
+### Build Errors
+
+```bash
+# Clear cache
+rm -rf node_modules
+rm package-lock.json
+
+# Reinstall
+npm install
+
+# Rebuild
+npm run build
+```
+
+---
+
+## 🚀 Production Build
+
+### Build
 
 ```bash
 npm run build
 ```
 
-### Preview Production Build
+Output: `dist/` directory
+
+### Preview
 
 ```bash
 npm run preview
 ```
 
-## 📊 Event System
+### Deploy
 
-The proctoring system automatically sends events to the backend API at `/api/proctor/events`.
+Deploy `dist/` folder to:
+- Vercel
+- Netlify
+- AWS S3 + CloudFront
+- Any static hosting
 
-### Events Emitted and Sent to Backend
+**Environment Variables:**
+```env
+VITE_API_URL=https://api.your-domain.com
+VITE_WS_URL=wss://api.your-domain.com
+```
 
-**Camera Status Change:**
-
+**Usage in code:**
 ```typescript
-{
-  examId: "exam_123",
-  candidateId: "candidate_abc123",
-  type: "camera_status",
-  payload: {
-    status: "on" | "off",
-    device: "camera",
-    required: true,
-    timestamp: 1769433337465
-  },
-  severity: "info" | "critical",
-  timestamp: 1769433337465
-}
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8000';
 ```
-
-**Microphone Status Change:**
-
-```typescript
-{
-  examId: "exam_123",
-  candidateId: "candidate_abc123",
-  type: "mic_status",
-  payload: {
-    status: "on" | "off",
-    device: "microphone",
-    required: true,
-    timestamp: 1769433337465
-  },
-  severity: "info" | "critical",
-  timestamp: 1769433337465
-}
-```
-
-**Tab Blur (Candidate Switched Tabs):**
-
-```typescript
-{
-  examId: "exam_123",
-  candidateId: "candidate_abc123",
-  type: "tab_blur",
-  payload: {
-    blurred: true,
-    timestamp: 1769433337465
-  },
-  severity: "warning",
-  timestamp: 1769433337465
-}
-```
-
-**Fullscreen Exit:**
-
-```typescript
-{
-  examId: "exam_123",
-  candidateId: "candidate_abc123",
-  type: "fullscreen_exit",
-  payload: {
-    exited: true,
-    reason: "user_action"
-  },
-  severity: "critical",
-  timestamp: 1769433337465
-}
-```
-
-**Stream Lost:**
-
-```typescript
-{
-  examId: "exam_123",
-  candidateId: "candidate_abc123",
-  type: "stream_lost",
-  payload: {
-    error: "Required media stream not initialized",
-    severity: "critical"
-  },
-  severity: "critical",
-  timestamp: 1769433337465
-}
-```
-
-### Backend Response
-
-When an event is successfully sent, the backend returns:
-
-```json
-{
-  "status": "ok",
-  "event_id": 1,
-  "server_timestamp": 1769433340123
-}
-```
-
-### Viewing Events
-
-**Option 1: Browser Console**
-
-- Open DevTools → Console
-- Look for: `✅ Event sent: camera_status → Event ID: 1`
-
-**Option 2: Backend Logs**
-
-- Check terminal running uvicorn
-- Look for: `INFO: Event ingested: camera_status from candidate_xxx (latency: 50ms)`
-
-**Option 3: Backend API**
-
-- Visit: http://localhost:8000/docs
-- Use `GET /api/proctor/events` endpoint
-- Filter by `exam_id` to see all events for an exam
-
-## 🛠️ Key Files
-
-### Core Proctoring Files
-
-| File                                                       | Purpose                                      |
-| ---------------------------------------------------------- | -------------------------------------------- |
-| [`mediaConfig.ts`](src/proctoring/core/mediaConfig.ts)     | Configuration presets for media requirements |
-| [`streamManager.ts`](src/proctoring/core/streamManager.ts) | Global stream initialization and lifecycle   |
-| [`mediaMonitor.ts`](src/proctoring/core/mediaMonitor.ts)   | Real-time media status monitoring            |
-
-### Page Components
-
-| File                                                     | Purpose                               |
-| -------------------------------------------------------- | ------------------------------------- |
-| [`JoinExam.tsx`](src/pages/candidate/JoinExam.tsx)       | Exam entry page for candidates        |
-| [`SystemCheck.tsx`](src/pages/candidate/SystemCheck.tsx) | Pre-exam system verification          |
-| [`Exam.tsx`](src/pages/candidate/Exam.tsx)               | Main exam page with active proctoring |
-| [`Dashboard.tsx`](src/pages/admin/Dashboard.tsx)         | Admin dashboard for monitoring        |
-
-## 🎨 Styling
-
-- **Framework:** Tailwind CSS v4
-- **Configuration:** [`tailwind.config.js`](tailwind.config.js)
-- **PostCSS:** [@tailwindcss/postcss](postcss.config.mjs)
-- **Global Styles:** [`src/index.css`](src/index.css)
-
-## 🔐 Production Checklist
-
-- [x] No permission queries in monitoring loop
-- [x] Single event per state change
-- [x] Stream cleanup only on exam end
-- [x] Safari compatibility
-- [x] React strict mode safe
-- [x] No camera blinking
-- [x] Clean, minimal events
-- [x] Timestamp for all events
-- [x] Proper error handling
-- [x] Independent camera/microphone
-- [x] Configurable requirements
-- [x] Accurate initial state detection
-
-## 📝 Development Notes
-
-### Media Stream Best Practices
-
-1. Initialize stream once with `initializeMediaStream()`
-2. Reuse global stream with `getGlobalStream()`
-3. Monitor without re-requesting permissions
-4. Cleanup only when exam truly ends
-5. Handle camera and microphone independently
-
-### Common Issues Solved
-
-- ✅ Camera blinking during monitoring
-- ✅ Safari permission query errors
-- ✅ Duplicate event emissions
-- ✅ Stream dying on component re-render
-- ✅ One device failure blocking the other
-- ✅ False positives for optional devices
-
-## 🚦 Current Status
-
-**✅ Completed:**
-
-- Frontend project setup (React + TypeScript + Vite + Tailwind)
-- Production-ready proctoring system
-- Flexible media requirements configuration
-- Routing and layout structure with dynamic exam IDs
-- Backend API integration with proctor events
-- Real-time event detection and reporting:
-  - Camera/microphone status monitoring
-  - Tab blur detection
-  - Fullscreen exit detection
-- Vite proxy configuration (no CORS issues)
-- Type-safe event schemas
-- Error handling and loading states
-- Basic candidate and admin pages
-
-**🚧 Next Steps:**
-
-- WebSocket integration for real-time admin monitoring
-- Video streaming with WebRTC
-- Admin dashboard with live event feed
-- Authentication and authorization
-- Session management
-- Recording and playback functionality
-
-## 🧪 Testing Guide
-
-### Quick Test Flow
-
-1. **Start Backend:**
-
-   ```bash
-   cd backend
-   uvicorn app.main:app --reload
-   ```
-
-2. **Start Frontend:**
-
-   ```bash
-   cd frontend
-   npm run dev
-   ```
-
-3. **Access Exam:**
-   - Open: http://localhost:5173/exam/test_exam_123
-   - Allow camera/mic permissions
-   - Open browser DevTools → Console
-
-4. **Test Events:**
-   - ✅ See initial `camera_status` and `mic_status` events
-   - ✅ Switch tabs → `tab_blur` event
-   - ✅ Enter/exit fullscreen → `fullscreen_exit` event
-   - ✅ Disable camera → `camera_status` with severity `critical`
-
-5. **Verify Backend:**
-   - Check backend logs for: `INFO: Event ingested...`
-   - Or query: http://localhost:8000/api/proctor/events?exam_id=test_exam_123
-
-### Troubleshooting
-
-**Events not sending?**
-
-- Verify backend is running on port 8000
-- Check Network tab in DevTools for 404/403 errors
-- Ensure Vite proxy is configured correctly
-
-**Camera/Mic not working?**
-
-- Allow browser permissions when prompted
-- Try Chrome (recommended for best compatibility)
-- Check if devices are available and not in use
-
-**Route not found?**
-
-- Make sure you're using `/exam/:examId` format
-- Example: `/exam/exam_123` not `/exam/`
-
-## 📚 Additional Documentation
-
-- [Media Requirements Guide](MEDIA_REQUIREMENTS.md) - Detailed configuration guide
-- [Production Ready Notes](../PRODUCTION_READY.md) - Production improvements made
-
-## 🤝 Contributing
-
-When making changes:
-
-1. Update this README if adding new features
-2. Document configuration options in MEDIA_REQUIREMENTS.md
-3. Follow TypeScript strict mode
-4. Test with Safari, Chrome, and Edge
-5. Ensure camera/mic work independently
 
 ---
 
-**Version:** 1.0.0  
-**Last Updated:** January 26, 2026  
-**Status:** Production-Ready Frontend
+## 📚 Key Features
+
+✅ **No Camera Blinking** - Stream initialized once and reused  
+✅ **Safari Compatible** - No permission queries in monitoring loop  
+✅ **Clean Events** - One event per state change  
+✅ **Production Safe** - Stream cleanup only on exam end  
+✅ **Flexible Requirements** - Easy configuration per exam type  
+✅ **Real-Time AI** - 3 FPS frame processing with immediate feedback  
+✅ **Event Buffering** - No data loss during network issues  
+✅ **Automatic Reconnection** - Exponential backoff strategy  
+✅ **TypeScript** - Full type safety  
+✅ **Modern Stack** - React 19 + Vite + Tailwind
+
+---
+
+## 📝 License
+
+MIT License
