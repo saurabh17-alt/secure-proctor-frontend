@@ -64,9 +64,48 @@ export function useAIProcessing(config: AIProcessingConfig) {
       try {
         console.log("🔄 Loading MediaPipe FaceDetector...");
 
-        // @ts-ignore
-        const vision: any =
-          await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest");
+        // Try to use local files first (for offline/blocked CDN scenarios)
+        const USE_LOCAL_FILES = true; // Set to false to use CDN
+
+        let vision: any;
+        let wasmPath: string;
+        let modelPath: string;
+
+        if (USE_LOCAL_FILES) {
+          console.log("📦 Loading from local files...");
+
+          // Load via script tag since Vite doesn't allow imports from /public
+          const script = document.createElement("script");
+          script.type = "module";
+          script.textContent = `
+            import * as mediapipeVision from "/mediapipe/vision_bundle.mjs";
+            window.MediaPipeVision = mediapipeVision;
+          `;
+          document.head.appendChild(script);
+
+          // Wait for script to load
+          await new Promise((resolve) => {
+            const checkLoaded = setInterval(() => {
+              if ((window as any).MediaPipeVision) {
+                clearInterval(checkLoaded);
+                resolve(true);
+              }
+            }, 100);
+          });
+
+          vision = (window as any).MediaPipeVision;
+          wasmPath = "/mediapipe/wasm";
+          modelPath = "/mediapipe/models/blaze_face_short_range.tflite";
+        } else {
+          console.log("📦 Loading from CDN...");
+          // @ts-ignore
+          vision =
+            await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest");
+          wasmPath =
+            "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm";
+          modelPath =
+            "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite";
+        }
 
         console.log("📦 MediaPipe module loaded:", vision);
 
@@ -77,17 +116,15 @@ export function useAIProcessing(config: AIProcessingConfig) {
         }
 
         console.log("🔧 Creating FilesetResolver...");
-        const filesetResolver = await vision.FilesetResolver.forVisionTasks(
-          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm",
-        );
+        const filesetResolver =
+          await vision.FilesetResolver.forVisionTasks(wasmPath);
 
         console.log("🔧 Creating FaceDetector...");
         const faceDetector = await vision.FaceDetector.createFromOptions(
           filesetResolver,
           {
             baseOptions: {
-              modelAssetPath:
-                "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite",
+              modelAssetPath: modelPath,
             },
             runningMode: "VIDEO",
             minDetectionConfidence: 0.5,
