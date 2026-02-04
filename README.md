@@ -1,6 +1,6 @@
 # Secure Proctor - Frontend
 
-Production-ready online proctoring system built with React, TypeScript, and Vite.
+Production-ready online proctoring system built with React, TypeScript, and Vite. Features browser-based MediaPipe face detection with offline support.
 
 ---
 
@@ -12,6 +12,7 @@ Production-ready online proctoring system built with React, TypeScript, and Vite
 - **Routing:** React Router DOM 7.13.0
 - **State Management:** Zustand 5.0.10
 - **HTTP Client:** Axios 1.13.3
+- **Face Detection:** MediaPipe Tasks Vision (browser-based)
 - **Media:** MediaStream API (Webcam & Microphone)
 - **Node:** 18+
 
@@ -29,25 +30,45 @@ frontend/
 │   │   ├── candidate/              # Candidate pages
 │   │   │   ├── JoinExam.tsx        # Exam entry
 │   │   │   ├── SystemCheck.tsx     # Camera/mic verification
-│   │   │   └── Exam.tsx            # Main exam page + AI proctoring
+│   │   │   ├── Exam.tsx            # Main exam page
+│   │   │   └── TestExam.tsx        # Test page with AI detection
 │   │   │
 │   │   └── admin/                  # Admin pages
-│   │       └── Dashboard.tsx       # Admin monitoring dashboard
+│   │       ├── Dashboard.tsx       # Admin monitoring dashboard
+│   │       └── ViolationsReport.tsx # Violations report with images
 │   │
 │   ├── components/
 │   │   └── layout/
 │   │       ├── CandidateLayout.tsx # Candidate layout wrapper
 │   │       └── AdminLayout.tsx     # Admin layout wrapper
 │   │
-│   ├── proctoring/
-│   │   └── core/
-│   │       ├── mediaConfig.ts      # Media requirements config
-│   │       ├── streamManager.ts    # Global stream lifecycle
-│   │       └── mediaMonitor.ts     # Real-time media monitoring
-│   │
 │   ├── hooks/
-│   │   └── useSystemCheck.ts       # System verification hook
+│   │   ├── useSystemCheck.ts       # System verification hook
+│   │   ├── useAIProcessing.ts      # MediaPipe face detection
+│   │   └── useViolationManager.ts  # Violation & cooling period manager
 │   │
+│   ├── proctoring/
+│   │   ├── core/
+│   │   │   ├── mediaConfig.ts      # Media requirements config
+│   │   │   ├── streamManager.ts    # Global stream lifecycle
+│   │   │   └── mediaMonitor.ts     # Real-time media monitoring
+│   │   ├── events/
+│   │   │   ├── eventEmitter.ts     # Event emission
+│   │   │   ├── eventQueue.ts       # Event buffering
+│   │   │   └── types.ts            # Type definitions
+│   │   └── socket/
+│   │       └── proctorSocket.ts    # WebSocket communication
+│   │
+│   └── types/
+│       └── mediapipe.d.ts          # MediaPipe type declarations
+│
+├── public/
+│   └── mediapipe/                  # MediaPipe offline files
+│       ├── vision_bundle.mjs       # MediaPipe library
+│       ├── wasm/                   # WASM runtime files
+│       └── models/                 # Face detection model
+│
+└── download_mediapipe.ps1          # Download script for offline use
 │   ├── App.tsx                     # Main app component
 │   ├── main.tsx                    # Entry point
 │   └── index.css                   # Global styles + Tailwind
@@ -70,29 +91,59 @@ frontend/
 
 ### Setup
 
-```bash
+```powershell
 cd frontend
 
 # Install dependencies
 npm install
 
+# Download MediaPipe files for offline use (recommended)
+.\download_mediapipe.ps1
+
 # Start development server
 npm run dev
-
-# Build for production
-npm run build
-
-# Preview production build
-npm run preview
 ```
 
 ### Development Server
 
-```bash
+```powershell
 npm run dev
 ```
 
 Access at: http://localhost:5173
+
+---
+
+## 🤖 MediaPipe Face Detection (Offline Support)
+
+### Download MediaPipe Files
+
+For offline/restricted networks, download MediaPipe files locally:
+
+```powershell
+.\download_mediapipe.ps1
+```
+
+Files are saved to `public/mediapipe/` (~12 MB total):
+
+- `vision_bundle.mjs` - MediaPipe library
+- `wasm/*.wasm` - WebAssembly runtime
+- `models/blaze_face_short_range.tflite` - Face detection model
+
+**Configuration:**  
+Already set in `src/hooks/useAIProcessing.ts`:
+
+```typescript
+const USE_LOCAL_FILES = true; // Use local files (offline mode)
+```
+
+**Verification:**  
+Check browser console for:
+
+```
+📦 Loading from local files...
+✅ MediaPipe FaceDetector loaded successfully
+```
 
 ---
 
@@ -101,13 +152,17 @@ Access at: http://localhost:5173
 ### Candidate Routes
 
 #### `/join-exam/:examId`
+
 Exam entry point where candidates:
+
 - Enter their name
 - Enter exam ID
 - Start exam
 
 #### `/system-check/:examId`
+
 System verification page that checks:
+
 - Camera permission & functionality
 - Microphone permission & functionality
 - Browser compatibility
@@ -116,7 +171,9 @@ System verification page that checks:
 After passing, navigates to exam page.
 
 #### `/exam/:examId`
+
 Main exam page with AI proctoring:
+
 - Live camera feed (top-right corner)
 - Real-time AI detection status
 - Head pose tracking display (yaw/pitch angles)
@@ -124,6 +181,7 @@ Main exam page with AI proctoring:
 - Automatic violation detection
 
 **Features:**
+
 - No camera blinking (stream initialized once)
 - Real-time face detection
 - Head pose monitoring
@@ -133,13 +191,16 @@ Main exam page with AI proctoring:
 ### Admin Routes
 
 #### `/admin/dashboard/:examId`
+
 Admin monitoring dashboard:
+
 - List of active candidates
 - Real-time event feed
 - Violation alerts
 - Connection status for each candidate
 
 **Features:**
+
 - WebSocket connection to backend
 - Real-time event streaming
 - Candidate connection/disconnection tracking
@@ -153,23 +214,29 @@ Admin monitoring dashboard:
 
 ```typescript
 export const MEDIA_REQUIREMENTS = {
-  camera: true,      // Camera required
+  camera: true, // Camera required
   microphone: false, // Microphone optional
-  screen: false      // Screen share not required
+  screen: false, // Screen share not required
 };
 ```
 
 ### Stream Manager (`proctoring/core/streamManager.ts`)
 
 **Global Stream Lifecycle:**
+
 - Initializes stream once at exam start
 - Reuses stream throughout exam
 - Cleans up only on exam end
 - No camera blinking
 
 **Usage:**
+
 ```typescript
-import { initMediaStream, cleanupMediaStream, getStream } from '@/proctoring/core/streamManager';
+import {
+  initMediaStream,
+  cleanupMediaStream,
+  getStream,
+} from "@/proctoring/core/streamManager";
 
 // Initialize (call once in Exam.tsx)
 const stream = await initMediaStream();
@@ -184,6 +251,7 @@ cleanupMediaStream();
 ### Media Monitor (`proctoring/core/mediaMonitor.ts`)
 
 **Real-Time Monitoring:**
+
 - Monitors camera and mic status every 1.5s
 - Detects device disconnection
 - Detects stream track ending
@@ -192,17 +260,21 @@ cleanupMediaStream();
 - Safari compatible (no permission queries in loop)
 
 **Usage:**
+
 ```typescript
-import { startMediaMonitoring, stopMediaMonitoring } from '@/proctoring/core/mediaMonitor';
+import {
+  startMediaMonitoring,
+  stopMediaMonitoring,
+} from "@/proctoring/core/mediaMonitor";
 
 // Start monitoring
 startMediaMonitoring({
   stream,
-  requiredDevices: ['camera', 'microphone'],
+  requiredDevices: ["camera", "microphone"],
   onEvent: (event) => {
-    console.log('Media event:', event);
+    console.log("Media event:", event);
     // Send to backend
-  }
+  },
 });
 
 // Stop monitoring (does NOT kill stream)
@@ -210,6 +282,7 @@ stopMediaMonitoring();
 ```
 
 **Events Emitted:**
+
 ```typescript
 // Camera status
 {
@@ -237,25 +310,27 @@ In `Exam.tsx`:
 ```typescript
 // Capture frame from video element
 const captureFrame = () => {
-  const canvas = document.createElement('canvas');
+  const canvas = document.createElement("canvas");
   canvas.width = 640;
   canvas.height = 480;
-  const ctx = canvas.getContext('2d');
+  const ctx = canvas.getContext("2d");
   ctx?.drawImage(videoRef.current, 0, 0, 640, 480);
-  return canvas.toDataURL('image/jpeg', 0.8); // Base64 JPEG
+  return canvas.toDataURL("image/jpeg", 0.8); // Base64 JPEG
 };
 
 // Send to backend via WebSocket (every 333ms = 3 FPS)
 useEffect(() => {
   const interval = setInterval(() => {
     const frame = captureFrame();
-    websocket.send(JSON.stringify({
-      action: 'ai_frame',
-      session_id: sessionId,
-      frame: frame
-    }));
+    websocket.send(
+      JSON.stringify({
+        action: "ai_frame",
+        session_id: sessionId,
+        frame: frame,
+      }),
+    );
   }, 333);
-  
+
   return () => clearInterval(interval);
 }, []);
 ```
@@ -265,13 +340,13 @@ useEffect(() => {
 ```typescript
 websocket.onmessage = (event) => {
   const data = JSON.parse(event.data);
-  
-  if (data.type === 'ai_violation') {
+
+  if (data.type === "ai_violation") {
     // Display violation to candidate
-    setViolations(prev => [...prev, data.violation]);
-    
+    setViolations((prev) => [...prev, data.violation]);
+
     // Show alert if critical
-    if (data.violation.level === 'critical') {
+    if (data.violation.level === "critical") {
       alert(`Violation: ${data.violation.type}`);
     }
   }
@@ -281,12 +356,16 @@ websocket.onmessage = (event) => {
 ### Display AI Status
 
 ```tsx
-{/* AI Detection Status */}
+{
+  /* AI Detection Status */
+}
 <div className="ai-status">
   <div>Face: {faceStatus}</div>
-  <div>Head Pose: yaw={yaw.toFixed(1)}° pitch={pitch.toFixed(1)}°</div>
+  <div>
+    Head Pose: yaw={yaw.toFixed(1)}° pitch={pitch.toFixed(1)}°
+  </div>
   <div>Violations: {violations.length}</div>
-</div>
+</div>;
 ```
 
 ---
@@ -298,22 +377,25 @@ websocket.onmessage = (event) => {
 #### Send Event
 
 ```typescript
-import axios from 'axios';
+import axios from "axios";
 
 const sendEvent = async (event: ProctorEvent) => {
   try {
-    const response = await axios.post('http://localhost:8000/api/proctor/events', {
-      examId: 'exam123',
-      candidateId: 'user456',
-      type: 'camera_off',
-      severity: 'critical',
-      payload: { device: 'camera', status: 'off' },
-      timestamp: Date.now()
-    });
-    
-    console.log('Event sent:', response.data);
+    const response = await axios.post(
+      "http://localhost:8000/api/proctor/events",
+      {
+        examId: "exam123",
+        candidateId: "user456",
+        type: "camera_off",
+        severity: "critical",
+        payload: { device: "camera", status: "off" },
+        timestamp: Date.now(),
+      },
+    );
+
+    console.log("Event sent:", response.data);
   } catch (error) {
-    console.error('Failed to send event:', error);
+    console.error("Failed to send event:", error);
   }
 };
 ```
@@ -324,12 +406,12 @@ const sendEvent = async (event: ProctorEvent) => {
 const getEvents = async (examId: string) => {
   try {
     const response = await axios.get(
-      `http://localhost:8000/api/proctor/events?exam_id=${examId}&limit=50`
+      `http://localhost:8000/api/proctor/events?exam_id=${examId}&limit=50`,
     );
-    
+
     return response.data; // Array of events
   } catch (error) {
-    console.error('Failed to fetch events:', error);
+    console.error("Failed to fetch events:", error);
   }
 };
 ```
@@ -340,26 +422,28 @@ const getEvents = async (examId: string) => {
 
 ```typescript
 const connectWebSocket = (examId: string, candidateId: string) => {
-  const ws = new WebSocket(`ws://localhost:8000/ws/proctor/${examId}/${candidateId}`);
-  
+  const ws = new WebSocket(
+    `ws://localhost:8000/ws/proctor/${examId}/${candidateId}`,
+  );
+
   ws.onopen = () => {
-    console.log('WebSocket connected');
+    console.log("WebSocket connected");
   };
-  
+
   ws.onmessage = (event) => {
     const data = JSON.parse(event.data);
-    console.log('Received:', data);
+    console.log("Received:", data);
   };
-  
+
   ws.onerror = (error) => {
-    console.error('WebSocket error:', error);
+    console.error("WebSocket error:", error);
   };
-  
+
   ws.onclose = () => {
-    console.log('WebSocket disconnected');
+    console.log("WebSocket disconnected");
     // Implement reconnection logic
   };
-  
+
   return ws;
 };
 ```
@@ -367,26 +451,30 @@ const connectWebSocket = (examId: string, candidateId: string) => {
 #### Send Event
 
 ```typescript
-ws.send(JSON.stringify({
-  action: 'event',
-  event_id: `evt_${Date.now()}`,
-  session_id: sessionId,
-  user_id: candidateId,
-  type: 'tab_switch',
-  payload: { url: window.location.href },
-  timestamp: Date.now(),
-  sequence: eventSequence++
-}));
+ws.send(
+  JSON.stringify({
+    action: "event",
+    event_id: `evt_${Date.now()}`,
+    session_id: sessionId,
+    user_id: candidateId,
+    type: "tab_switch",
+    payload: { url: window.location.href },
+    timestamp: Date.now(),
+    sequence: eventSequence++,
+  }),
+);
 ```
 
 #### Send AI Frame
 
 ```typescript
-ws.send(JSON.stringify({
-  action: 'ai_frame',
-  session_id: sessionId,
-  frame: base64ImageData // data:image/jpeg;base64,...
-}));
+ws.send(
+  JSON.stringify({
+    action: "ai_frame",
+    session_id: sessionId,
+    frame: base64ImageData, // data:image/jpeg;base64,...
+  }),
+);
 ```
 
 ---
@@ -443,6 +531,7 @@ ws.send(JSON.stringify({
 ## 📊 Event Types Handled
 
 ### Media Events
+
 - `camera_on` - Camera enabled
 - `camera_off` - Camera disabled
 - `mic_on` - Microphone enabled
@@ -450,12 +539,14 @@ ws.send(JSON.stringify({
 - `stream_error` - Media stream error
 
 ### Behavioral Events
+
 - `tab_switch` - Switched browser tab
 - `window_blur` - Left exam window
 - `fullscreen_exit` - Exited fullscreen mode
 - `copy_paste` - Copy/paste detected (if implemented)
 
 ### AI Violations (from backend)
+
 - `ai_no_face` - No face detected
 - `ai_multiple_faces` - Multiple faces detected
 - `ai_looking_away` - Head turned away
@@ -469,16 +560,17 @@ ws.send(JSON.stringify({
 ### Tailwind CSS
 
 **Configuration** (`tailwind.config.js`):
+
 ```javascript
 export default {
-  content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
+  content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
   theme: {
     extend: {
       colors: {
-        primary: '#3b82f6',
-        secondary: '#10b981',
-        danger: '#ef4444',
-        warning: '#f59e0b',
+        primary: "#3b82f6",
+        secondary: "#10b981",
+        danger: "#ef4444",
+        warning: "#f59e0b",
       },
     },
   },
@@ -487,11 +579,10 @@ export default {
 ```
 
 **Usage:**
+
 ```tsx
 <div className="bg-white p-4 rounded-lg shadow-md">
-  <h1 className="text-2xl font-bold text-gray-900">
-    Exam Title
-  </h1>
+  <h1 className="text-2xl font-bold text-gray-900">Exam Title</h1>
   <button className="bg-primary text-white px-4 py-2 rounded hover:bg-blue-600">
     Start Exam
   </button>
@@ -501,6 +592,7 @@ export default {
 ### Custom Styles
 
 Global styles in `index.css`:
+
 ```css
 /* Custom scrollbar */
 .custom-scrollbar::-webkit-scrollbar {
@@ -646,21 +738,24 @@ npm run preview
 ### Deploy
 
 Deploy `dist/` folder to:
+
 - Vercel
 - Netlify
 - AWS S3 + CloudFront
 - Any static hosting
 
 **Environment Variables:**
+
 ```env
 VITE_API_URL=https://api.your-domain.com
 VITE_WS_URL=wss://api.your-domain.com
 ```
 
 **Usage in code:**
+
 ```typescript
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8000';
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const WS_URL = import.meta.env.VITE_WS_URL || "ws://localhost:8000";
 ```
 
 ---
