@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { useParams } from "react-router-dom";
 import {
   startMediaMonitor,
@@ -20,6 +20,8 @@ import {
   onMessage,
 } from "../../proctoring/socket/proctorSocket";
 import { getQueueSize } from "../../proctoring/events/eventQueue";
+import { useAIProcessing } from "../../hooks/useAIProcessing";
+import type { ViolationAlert } from "../../hooks/useViolationManager";
 
 interface LogEntry {
   timestamp: string;
@@ -37,6 +39,8 @@ export default function TestExam() {
   const [isTestRunning, setIsTestRunning] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
 
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+
   // Generate stable candidateId
   const candidateId = useMemo(
     () => "test_candidate_" + Math.random().toString(36).substr(2, 9),
@@ -45,6 +49,20 @@ export default function TestExam() {
   const sessionId = examId || "test_exam";
 
   const requirements = MEDIA_PRESETS.BOTH;
+
+  // Handle violation detection from AI
+  const handleViolation = (alert: ViolationAlert) => {
+    addLog("violation", `🚨 AI VIOLATION: ${alert.message}`);
+  };
+
+  // AI Processing with violations
+  const aiProcessing = useAIProcessing({
+    examId: sessionId,
+    candidateId,
+    enabled: isTestRunning,
+    checkInterval: 1000, // Check every 1 second
+    onViolationDetected: handleViolation,
+  });
 
   // Add log entry
   const addLog = (type: LogEntry["type"], message: string) => {
@@ -155,6 +173,22 @@ export default function TestExam() {
           // Don't return - let test continue to show violations
         } else {
           addLog("info", "✅ Media stream initialized successfully");
+
+          // Create video element for AI processing
+          const video = document.createElement("video");
+          video.srcObject = stream;
+          video.autoplay = true;
+          video.muted = true;
+          video.playsInline = true;
+
+          video.onloadedmetadata = () => {
+            video.play();
+            aiProcessing.setVideoElement(video);
+            addLog("info", "✅ AI processing video feed connected");
+          };
+
+          videoRef.current = video;
+
           setIsInitializing(false);
           stopMonitoring = startMediaMonitor(handleProctorEvent);
         }
@@ -306,9 +340,21 @@ export default function TestExam() {
         {connectionState === "reconnecting" && "🟡 Reconnecting..."}
         {connectionState === "disconnected" && "🔴 Disconnected"}
         {queuedEvents > 0 && ` • ${queuedEvents} events queued`}
+        {aiProcessing.connected && " • 🤖 AI Active"}
       </div>
 
-      <div className="pt-12 p-8">
+      {/* AI Cooling Period Banner */}
+      {aiProcessing.isInCoolingPeriod && (
+        <div className="fixed top-12 left-0 right-0 bg-orange-500 text-white p-3 text-center text-sm font-medium z-40">
+          ⏱️ Cooling Period Active:{" "}
+          {aiProcessing.coolingPeriod.remainingSeconds}s remaining (Face
+          detection paused)
+        </div>
+      )}
+
+      <div
+        className={`${aiProcessing.isInCoolingPeriod ? "pt-24" : "pt-12"} p-8`}
+      >
         <div className="max-w-7xl mx-auto">
           {/* Control Buttons */}
           <div className="mb-6 flex gap-4">
@@ -325,6 +371,43 @@ export default function TestExam() {
               🗑️ Clear Logs
             </button>
           </div>
+
+          {/* AI Violation Alerts */}
+          {aiProcessing.violationAlerts.length > 0 && (
+            <div className="mb-6 bg-red-50 border-2 border-red-500 rounded-lg p-4">
+              <h3 className="font-bold text-red-800 mb-3">
+                🚨 AI Violations Detected ({aiProcessing.violationAlerts.length}
+                )
+              </h3>
+              <div className="space-y-2 max-h-40 overflow-y-auto">
+                {aiProcessing.violationAlerts
+                  .slice(-5)
+                  .reverse()
+                  .map((alert: ViolationAlert) => (
+                    <div
+                      key={alert.id}
+                      className="bg-white border border-red-300 rounded p-2 text-sm"
+                    >
+                      <div className="flex justify-between items-start">
+                        <span className="text-red-800 font-medium">
+                          {alert.message}
+                        </span>
+                        <span className="text-gray-500 text-xs">
+                          {new Date(alert.timestamp).toLocaleTimeString()}
+                        </span>
+                      </div>
+                      {alert.image && (
+                        <div className="mt-2">
+                          <span className="text-xs text-gray-600">
+                            ✓ Image captured and saved
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Left Side - Exam Info */}
@@ -377,6 +460,20 @@ export default function TestExam() {
                     </span>
                   </div>
                   <div className="flex justify-between">
+                    <span className="text-gray-600">AI Processing:</span>
+                    <span className="font-mono font-semibold">
+                      {aiProcessing.connected ? "🟢 Active" : "🔴 Offline"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Cooling Period:</span>
+                    <span className="font-mono font-semibold">
+                      {aiProcessing.isInCoolingPeriod
+                        ? `⏱️ ${aiProcessing.coolingPeriod.remainingSeconds}s`
+                        : "✓ Ready"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
                     <span className="text-gray-600">Queued Events:</span>
                     <span className="font-mono font-semibold">
                       {queuedEvents}
@@ -389,18 +486,107 @@ export default function TestExam() {
                 </div>
               </div>
 
+              {/* AI Detection Status */}
+              <div className="bg-white rounded-lg shadow p-6">
+                <h3 className="font-semibold mb-3">AI Face Detection</h3>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Status:</span>
+                    <span
+                      className={`font-semibold ${
+                        aiProcessing.connected
+                          ? "text-green-600"
+                          : "text-gray-400"
+                      }`}
+                    >
+                      {aiProcessing.connected ? "✓ Active" : "⏳ Loading..."}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Last Face Count:</span>
+                    <span className="font-mono text-lg font-bold">
+                      {aiProcessing.lastFaceCount}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Detection Mode:</span>
+                    <span className="text-xs">
+                      {aiProcessing.lastFaceCount === 0
+                        ? "❌ No face detected"
+                        : aiProcessing.lastFaceCount === 1
+                          ? "✅ Single face (OK)"
+                          : "⚠️ Multiple faces"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Test Button */}
+                <button
+                  onClick={async () => {
+                    addLog("info", "🧪 Testing backend connection...");
+                    try {
+                      const response = await fetch(
+                        "http://localhost:8000/api/violations/save",
+                        {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            exam_id: sessionId,
+                            candidate_id: candidateId,
+                            violation_type: "test",
+                            message: "Test violation from button",
+                            timestamp: new Date().toISOString(),
+                            image:
+                              "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+                          }),
+                        },
+                      );
+                      if (response.ok) {
+                        const data = await response.json();
+                        addLog(
+                          "info",
+                          `✅ Backend test successful: ${JSON.stringify(data)}`,
+                        );
+                      } else {
+                        addLog(
+                          "error",
+                          `❌ Backend test failed: ${response.status}`,
+                        );
+                      }
+                    } catch (error) {
+                      addLog("error", `❌ Backend connection error: ${error}`);
+                    }
+                  }}
+                  className="mt-3 w-full px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm font-medium"
+                >
+                  🧪 Test Backend Connection
+                </button>
+              </div>
+
               {/* Test Instructions */}
               <div className="bg-purple-50 border border-purple-200 rounded-lg p-6">
                 <h3 className="font-semibold text-purple-900 mb-2">
-                  🧪 Test Violations:
+                  🧪 Test Face Detection:
                 </h3>
                 <ul className="space-y-2 text-sm text-purple-800">
-                  <li>📹 Cover camera for 3s → Warning</li>
-                  <li>📹 Keep camera off 30s → Terminate</li>
-                  <li>🎤 Mute mic for 5s → Warning</li>
-                  <li>🔄 Switch tabs 4 times → Violation</li>
+                  <li>
+                    🤖 Cover your face → "No Face" detected → Image saved + 1min
+                    cooling
+                  </li>
+                  <li>
+                    🤖 Show 2+ faces (photo/person) → "Multiple Faces" → Image
+                    saved + 1min cooling
+                  </li>
+                  <li>📹 Deny camera permission → Backend violation</li>
+                  <li>🔄 Switch tabs 4 times → Backend violation</li>
                   <li>📱 Exit fullscreen → Instant terminate</li>
                 </ul>
+                <div className="mt-3 pt-3 border-t border-purple-300">
+                  <p className="text-xs text-purple-700">
+                    💡 During cooling period, face detection pauses for 60
+                    seconds. All violations are saved to database with images.
+                  </p>
+                </div>
               </div>
             </div>
 

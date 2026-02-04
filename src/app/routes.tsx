@@ -2,6 +2,7 @@ import { Routes, Route } from "react-router-dom";
 import JoinExam from "../pages/candidate/JoinExam";
 import SystemCheck from "../pages/candidate/SystemCheck";
 import Dashboard from "../pages/admin/Dashboard";
+import ViolationsReport from "../pages/admin/ViolationsReport";
 import CandidateLayout from "../components/layout/CandidateLayout";
 import AdminLayout from "../components/layout/AdminLayout";
 import Exam from "../pages/candidate/Exam";
@@ -21,6 +22,7 @@ export default function AppRoutes() {
       {/* Admin Routes */}
       <Route path="/admin" element={<AdminLayout />}>
         <Route index element={<Dashboard />} />
+        <Route path="violations" element={<ViolationsReport />} />
       </Route>
     </Routes>
   );
