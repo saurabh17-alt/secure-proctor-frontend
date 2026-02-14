@@ -101,19 +101,40 @@ cp .env.example .env
 # VITE_API_URL=http://localhost:8000
 ```
 
-.\download_mediapipe.ps1
+---
 
-# Start development server
-
-npm run dev
-
-````
+## 🏃 Running
 
 ### Development Server
 
 ```powershell
+# Navigate to frontend folder
+cd frontend
+
+# Start development server
 npm run dev
-````
+```
+
+**Server will start at:** http://localhost:5173
+
+**Other commands:**
+
+```powershell
+# Build for production
+npm run build
+
+# Preview production build
+npm run preview
+
+# Type checking
+npm run type-check
+```
+
+**Access the application:**
+
+- Join Exam: http://localhost:5173/join-exam
+- Admin Dashboard: http://localhost:5173/admin
+- Violations Report: http://localhost:5173/admin/violations
 
 Access at: http://localhost:5173
 
