@@ -13,6 +13,7 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 import { useViolationManager } from "./useViolationManager";
 import type { ViolationAlert } from "./useViolationManager";
+import { apiClient } from "../services/api.service";
 
 interface AIProcessingConfig {
   examId: string;
@@ -208,30 +209,16 @@ export function useAIProcessing(config: AIProcessingConfig) {
       if (!alert.image) return;
 
       try {
-        const response = await fetch(
-          `http://localhost:8000/api/violations/save`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              exam_id: config.examId,
-              candidate_id: config.candidateId,
-              violation_type: alert.type,
-              message: alert.message,
-              timestamp: alert.timestamp,
-              image: alert.image,
-            }),
-          },
-        );
+        const data = await apiClient.post("/api/violations/save", {
+          exam_id: config.examId,
+          candidate_id: config.candidateId,
+          violation_type: alert.type,
+          message: alert.message,
+          timestamp: alert.timestamp,
+          image: alert.image,
+        });
 
-        if (response.ok) {
-          const data = await response.json();
-          console.log("✅ Violation saved:", data);
-        } else {
-          console.error("❌ Failed to save violation:", response.status);
-        }
+        console.log("✅ Violation saved:", data);
       } catch (error) {
         console.error("❌ Error sending violation to backend:", error);
       }

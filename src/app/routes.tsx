@@ -1,6 +1,7 @@
 import { Routes, Route } from "react-router-dom";
 import JoinExam from "../pages/candidate/JoinExam";
 import SystemCheck from "../pages/candidate/SystemCheck";
+import HardwareCheck from "../pages/candidate/HardwareCheck";
 import Dashboard from "../pages/admin/Dashboard";
 import ViolationsReport from "../pages/admin/ViolationsReport";
 import CandidateLayout from "../components/layout/CandidateLayout";
@@ -15,6 +16,7 @@ export default function AppRoutes() {
       <Route element={<CandidateLayout />}>
         <Route path="/join-exam" element={<JoinExam />} />
         <Route path="/system-check" element={<SystemCheck />} />
+        <Route path="/hardware-check" element={<HardwareCheck />} />
         <Route path="/exam/:examId" element={<Exam />} />
         <Route path="/test-exam/:examId" element={<TestExam />} />
       </Route>

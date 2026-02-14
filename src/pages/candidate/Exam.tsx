@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useRef } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import {
   startMediaMonitor,
   checkMediaPermissions,
@@ -24,12 +24,16 @@ import { useAIProcessing } from "../../hooks/useAIProcessing";
 
 export default function Exam() {
   const { examId } = useParams<{ examId: string }>();
+  const navigate = useNavigate();
   const [mediaError, setMediaError] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
   const [connectionState, setConnectionState] =
     useState<string>("disconnected");
   const [queuedEvents, setQueuedEvents] = useState<number>(0);
+  const [isTestActive, setIsTestActive] = useState(true);
+  const [isShuttingDown, setIsShuttingDown] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const cleanupCompleteRef = useRef(false);
 
   // Generate stable candidateId that doesn't change on re-render
   const candidateId = useMemo(
@@ -42,8 +46,7 @@ export default function Exam() {
   const aiProcessing = useAIProcessing({
     examId: sessionId,
     candidateId,
-    enabled: true, // Enable AI processing
-    fps: 2, // Send 2 frames per second
+    enabled: isTestActive && !isShuttingDown, // Disable when shutting down
   });
 
   // ⚙️ CONFIGURE REQUIREMENTS HERE
@@ -54,17 +57,60 @@ export default function Exam() {
 
   // Handle proctor events from media monitor
   const handleProctorEvent = (type: string, payload: any) => {
-    console.log("PROCTOR EVENT:", type, payload);
+    // Don't emit events if test is not active or shutting down
+    if (!isTestActive || isShuttingDown) {
+      return; // Silent skip during shutdown
+    }
+
+    console.log("📡 PROCTOR EVENT:", type, payload);
 
     // Emit event using the new system
     emitProctorEvent(sessionId, candidateId, type, payload);
   };
 
+  // Stop test handler with complete cleanup
+  const handleStopTest = () => {
+    if (isShuttingDown || cleanupCompleteRef.current) {
+      return;
+    }
+
+    setIsShuttingDown(true);
+
+    // Emit test end event FIRST (while everything still works)
+    try {
+      emitProctorEvent(sessionId, candidateId, "test_ended", {
+        reason: "user_action",
+        timestamp: Date.now(),
+        queued_events: queuedEvents,
+      });
+    } catch (error) {
+      // Silent error during shutdown
+    }
+
+    // Immediately cleanup media to stop camera/mic
+    cleanupMediaStream();
+
+    // Disconnect socket immediately to prevent reconnection
+    disconnectSocket();
+
+    // Mark as inactive (triggers useEffect cleanups)
+    setIsTestActive(false);
+
+    // Navigate after a brief delay
+    setTimeout(() => {
+      cleanupCompleteRef.current = true;
+      navigate("/join-exam");
+    }, 500);
+  };
+
   // WebSocket connection setup
   useEffect(() => {
-    if (!examId) return;
+    if (!examId || !isTestActive) return;
 
-    console.log("🔌 Initializing WebSocket connection...");
+    console.log("🚀 ===== STARTING PROCTORING SESSION =====");
+    console.log(`📋 Exam ID: ${examId}`);
+    console.log(`👤 Candidate ID: ${candidateId}`);
+    console.log(`🕐 Started at: ${new Date().toLocaleTimeString()}`);
 
     // Reset sequence for new session
     resetSequence();
@@ -72,7 +118,7 @@ export default function Exam() {
     // Set up callbacks
     onStateChange((state) => {
       setConnectionState(state);
-      console.log(`📡 Connection state: ${state}`);
+      console.log(`📡 WebSocket connection state changed: ${state}`);
     });
 
     onMessage((data) => {
@@ -80,6 +126,7 @@ export default function Exam() {
     });
 
     // Connect to WebSocket
+    console.log("🔌 Connecting to WebSocket...");
     connectSocket(sessionId, candidateId);
 
     // Update queue count periodically
@@ -89,26 +136,31 @@ export default function Exam() {
 
     // Cleanup on unmount
     return () => {
-      clearInterval(queueInterval);
-      disconnectSocket();
-      console.log("🔌 WebSocket disconnected");
+      if (isTestActive && !isShuttingDown) {
+        clearInterval(queueInterval);
+        disconnectSocket();
+      }
     };
-  }, [examId, sessionId, candidateId]);
+  }, [examId, sessionId, candidateId, isTestActive, isShuttingDown]);
 
   // Media monitoring setup
   useEffect(() => {
-    console.log("📹 Starting media monitoring...");
-    console.log("Requirements:", requirements);
+    if (!isTestActive || isShuttingDown) return;
+
+    console.log("📹 ===== INITIALIZING MEDIA =====");
+    console.log("📋 Requirements:", requirements);
 
     let stopMonitoring: (() => void) | null = null;
 
     // Initialize once and start monitoring
     const init = async () => {
       try {
+        console.log("🔍 Checking media permissions...");
         // Check permissions first (once, not in loop)
         const permissions = await checkMediaPermissions();
-        console.log("Permissions:", permissions);
+        console.log("✅ Permissions status:", permissions);
 
+        console.log("🎥 Initializing media stream...");
         // Initialize stream with requirements
         const { stream, errors } = await initializeMediaStream(requirements);
 
@@ -116,9 +168,11 @@ export default function Exam() {
         const errorMessages: string[] = [];
         if (requirements.camera && errors.camera) {
           errorMessages.push(`Camera: ${errors.camera}`);
+          console.error("❌ Camera error:", errors.camera);
         }
         if (requirements.microphone && errors.microphone) {
           errorMessages.push(`Microphone: ${errors.microphone}`);
+          console.error("❌ Microphone error:", errors.microphone);
         }
 
         if (!stream || errorMessages.length > 0) {
@@ -130,23 +184,27 @@ export default function Exam() {
           return;
         }
 
-        console.log("Media stream initialized successfully");
+        console.log("✅ Media stream initialized successfully");
+        console.log("✅ Media stream initialized successfully");
 
         // Connect video element to AI processing
         if (videoRef.current && stream) {
           videoRef.current.srcObject = stream;
           videoRef.current
             .play()
-            .catch((err) => console.error("Video play error:", err));
+            .catch((err) => console.error("❌ Video play error:", err));
           aiProcessing.setVideoElement(videoRef.current);
+          console.log("✅ Video element connected to AI processing");
         }
 
         setIsInitializing(false);
 
+        console.log("👁️ Starting media monitor...");
         // Start monitoring with event handler
         stopMonitoring = startMediaMonitor(handleProctorEvent);
+        console.log("✅ Media monitoring active");
       } catch (error) {
-        console.error("Media initialization error:", error);
+        console.error("❌ Media initialization error:", error);
         setMediaError(
           `Error: ${error instanceof Error ? error.message : "Unknown error"}`,
         );
@@ -159,11 +217,14 @@ export default function Exam() {
     // Monitor tab visibility (tab switching) - with debouncing
     let tabBlurTimer: ReturnType<typeof setTimeout> | null = null;
     const handleVisibilityChange = () => {
+      if (isShuttingDown) return; // Ignore during shutdown
+
       if (document.hidden) {
         // Debounce: wait 500ms before emitting
         // Prevents spam from rapid tab switching
         if (tabBlurTimer) clearTimeout(tabBlurTimer);
         tabBlurTimer = setTimeout(() => {
+          if (isShuttingDown) return; // Double-check before emitting
           console.warn("⚠️ Tab blur detected (debounced)");
           emitProctorEvent(sessionId, candidateId, "tab_blur", {
             blurred: true,
@@ -181,6 +242,8 @@ export default function Exam() {
 
     // Monitor fullscreen exit
     const handleFullscreenChange = () => {
+      if (isShuttingDown) return; // Ignore during shutdown
+
       if (!document.fullscreenElement) {
         console.warn("⚠️ Fullscreen exit detected");
         emitProctorEvent(sessionId, candidateId, "fullscreen_exit", {
@@ -194,16 +257,30 @@ export default function Exam() {
     document.addEventListener("visibilitychange", handleVisibilityChange);
     document.addEventListener("fullscreenchange", handleFullscreenChange);
 
-    // Cleanup: stop monitoring AND cleanup stream when exam truly ends
+    // Cleanup: stop monitoring AND cleanup stream when test ends
     return () => {
-      console.log("Exam ended → stopping monitoring + cleaning stream");
-      if (tabBlurTimer) clearTimeout(tabBlurTimer);
-      stopMonitoring?.();
-      cleanupMediaStream();
+      // Clear any pending timers
+      if (tabBlurTimer) {
+        clearTimeout(tabBlurTimer);
+        tabBlurTimer = null;
+      }
+
+      // Stop monitoring FIRST (this sets isActive=false in monitor)
+      if (stopMonitoring) {
+        stopMonitoring();
+        stopMonitoring = null;
+      }
+
+      // Small delay to ensure interval is fully stopped before cleaning stream
+      setTimeout(() => {
+        cleanupMediaStream();
+      }, 100);
+
+      // Remove event listeners
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
     };
-  }, [examId, candidateId]);
+  }, [examId, candidateId, isTestActive, isShuttingDown]);
 
   if (isInitializing) {
     return (
@@ -255,10 +332,20 @@ export default function Exam() {
       </div>
 
       <div className="mt-12">
-        <h1 className="text-2xl font-bold mb-4">Exam In Progress</h1>
-        <p className="text-gray-600">
-          Camera & microphone are being monitored with AI proctoring.
-        </p>
+        <div className="flex justify-between items-center mb-6">
+          <div>
+            <h1 className="text-2xl font-bold">Exam In Progress</h1>
+            <p className="text-gray-600">
+              Camera & microphone are being monitored with AI proctoring.
+            </p>
+          </div>
+          <button
+            onClick={handleStopTest}
+            className="bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 transition font-semibold"
+          >
+            🛑 Stop Test
+          </button>
+        </div>
 
         {/* Hidden video element for AI processing */}
         <video
@@ -289,71 +376,42 @@ export default function Exam() {
           </p>
         </div>
 
-        {/* AI Status Display */}
-        {aiProcessing.lastResult && (
-          <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <p className="text-blue-800 font-medium mb-2">
-              🤖 AI Processing Status
+        {/* AI Face Count Display */}
+        <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <p className="text-blue-800 font-medium mb-2">
+            🤖 AI Face Detection Status
+          </p>
+          <div className="text-sm text-blue-700">
+            <p>
+              Detected Faces:{" "}
+              <span className="font-mono font-bold text-lg">
+                {aiProcessing.lastFaceCount}
+              </span>
             </p>
-            <div className="text-sm text-blue-700 space-y-1">
-              <p>
-                Face Signal:{" "}
-                <span className="font-mono">
-                  {aiProcessing.lastResult.face_signal}
-                </span>
-              </p>
-              <p>
-                Pose Signal:{" "}
-                <span className="font-mono">
-                  {aiProcessing.lastResult.pose_signal}
-                </span>
-              </p>
-              {aiProcessing.lastResult.object_signals &&
-                aiProcessing.lastResult.object_signals.length > 0 && (
-                  <p className="text-orange-600 font-semibold">
-                    ⚠️ Objects:{" "}
-                    {aiProcessing.lastResult.object_signals.join(", ")}
-                  </p>
-                )}
-              {aiProcessing.lastResult.debug && (
-                <>
-                  <p>Face Count: {aiProcessing.lastResult.debug.face_count}</p>
-                  {aiProcessing.lastResult.debug.yaw !== undefined && (
-                    <p>
-                      Head Yaw: {aiProcessing.lastResult.debug.yaw.toFixed(1)}°
-                    </p>
-                  )}
-                  {aiProcessing.lastResult.debug.pitch !== undefined && (
-                    <p>
-                      Head Pitch:{" "}
-                      {aiProcessing.lastResult.debug.pitch.toFixed(1)}°
-                    </p>
-                  )}
-                  {aiProcessing.lastResult.debug.forbidden_objects > 0 && (
-                    <p className="text-red-600 font-semibold">
-                      🚨 Forbidden Objects:{" "}
-                      {aiProcessing.lastResult.debug.forbidden_objects}
-                    </p>
-                  )}
-                </>
-              )}
-            </div>
+            <p className="text-xs mt-1 text-blue-600">
+              {aiProcessing.lastFaceCount === 0 && "⚠️ No face detected"}
+              {aiProcessing.lastFaceCount === 1 && "✓ Single face detected"}
+              {aiProcessing.lastFaceCount > 1 && "⚠️ Multiple faces detected"}
+            </p>
           </div>
-        )}
+        </div>
 
         {/* AI Violations Display */}
-        {aiProcessing.violations.length > 0 && (
+        {aiProcessing.violationAlerts.length > 0 && (
           <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-4">
             <p className="text-red-800 font-medium mb-2">
               ⚠️ AI Violations Detected
             </p>
             <div className="text-sm text-red-700 space-y-2">
-              {aiProcessing.violations.slice(-3).map((v, idx) => (
+              {aiProcessing.violationAlerts.slice(-3).map((v, idx) => (
                 <div key={idx} className="border-l-2 border-red-400 pl-2">
                   <p className="font-semibold">
-                    {v.type} [{v.level}]
+                    {v.type.replace(/_/g, " ").toUpperCase()}
                   </p>
-                  <p className="text-xs">Duration: {v.duration.toFixed(1)}s</p>
+                  <p className="text-xs">{v.message}</p>
+                  <p className="text-xs text-gray-600">
+                    {new Date(v.timestamp).toLocaleTimeString()}
+                  </p>
                 </div>
               ))}
             </div>

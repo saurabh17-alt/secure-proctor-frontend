@@ -4,7 +4,31 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>frontend</title>
+    <title>Secure Proctor</title>
+    <script>
+      // Suppress MetaMask extension errors (browser extension interference)
+      window.addEventListener("error", function (e) {
+        if (e.message && e.message.includes("MetaMask")) {
+          e.preventDefault();
+          console.log(
+            "ℹ️ MetaMask extension detected but not needed for this application",
+          );
+          return false;
+        }
+      });
+      window.addEventListener("unhandledrejection", function (e) {
+        if (
+          e.reason &&
+          e.reason.message &&
+          e.reason.message.includes("MetaMask")
+        ) {
+          e.preventDefault();
+          console.log(
+            "ℹ️ MetaMask extension detected but not needed for this application",
+          );
+        }
+      });
+    </script>
   </head>
   <body>
     <div id="root"></div>

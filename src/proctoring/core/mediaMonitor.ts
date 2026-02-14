@@ -10,12 +10,16 @@ import { getGlobalStream, getCurrentRequirements } from "./streamManager";
 export function startMediaMonitor(emitEvent: Function) {
   let lastCameraStatus: boolean | null = null;
   let lastMicStatus: boolean | null = null;
+  let isActive = true; // Flag to stop monitoring
 
   const checkMediaStatus = () => {
+    // Don't check if monitor is stopped
+    if (!isActive) return;
+
     const stream = getGlobalStream();
     const requirements = getCurrentRequirements();
 
-    // Only fail if stream is null AND media is required
+    // Only fail if stream is null AND media is required AND monitor is active
     if (!stream && (requirements.camera || requirements.microphone)) {
       emitEvent("stream_lost", {
         error: "Required media stream not initialized",
@@ -73,6 +77,7 @@ export function startMediaMonitor(emitEvent: Function) {
 
   // Cleanup: ONLY stop interval, NOT the stream
   return () => {
+    isActive = false; // Stop the monitor from emitting
     clearInterval(interval);
   };
 }

@@ -13,6 +13,7 @@ import {
   getQueueSize,
 } from "../events/eventQueue";
 import { type ProctorEvent } from "../events/types";
+import { API_ENDPOINTS } from "../../config/api.config";
 
 let socket: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -40,11 +41,8 @@ export function connectSocket(sessionId: string, userId: string): void {
   currentUserId = userId;
   isManualDisconnect = false;
 
-  // Determine WebSocket URL
-  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const host = window.location.hostname;
-  const port = import.meta.env.DEV ? "8000" : window.location.port;
-  const url = `${protocol}//${host}:${port}/ws/proctor/${sessionId}/${userId}`;
+  // Get WebSocket URL from centralized config
+  const url = API_ENDPOINTS.websocket.proctor(sessionId, userId);
 
   console.log(`🔌 Connecting to: ${url}`);
 

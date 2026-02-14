@@ -29,12 +29,11 @@ frontend/
 │   ├── pages/
 │   │   ├── candidate/              # Candidate pages
 │   │   │   ├── JoinExam.tsx        # Exam entry
-│   │   │   ├── SystemCheck.tsx     # Camera/mic verification
-│   │   │   ├── Exam.tsx            # Main exam page
-│   │   │   └── TestExam.tsx        # Test page with AI detection
+│   │   │   ├── HardwareCheck.tsx   # Camera/mic verification
+│   │   │   └── Exam.tsx            # Main exam page with AI
 │   │   │
 │   │   └── admin/                  # Admin pages
-│   │       ├── Dashboard.tsx       # Admin monitoring dashboard
+│   │       ├── Dashboard.tsx       # Admin dashboard
 │   │       └── ViolationsReport.tsx # Violations report with images
 │   │
 │   ├── components/
@@ -42,10 +41,16 @@ frontend/
 │   │       ├── CandidateLayout.tsx # Candidate layout wrapper
 │   │       └── AdminLayout.tsx     # Admin layout wrapper
 │   │
+│   ├── config/
+│   │   └── api.config.ts           # Centralized API configuration
+│   │
+│   ├── services/
+│   │   └── api.service.ts          # HTTP client with auth
+│   │
 │   ├── hooks/
 │   │   ├── useSystemCheck.ts       # System verification hook
 │   │   ├── useAIProcessing.ts      # MediaPipe face detection
-│   │   └── useViolationManager.ts  # Violation & cooling period manager
+│   │   └── useViolationManager.ts  # Violation manager
 │   │
 │   ├── proctoring/
 │   │   ├── core/
@@ -53,11 +58,11 @@ frontend/
 │   │   │   ├── streamManager.ts    # Global stream lifecycle
 │   │   │   └── mediaMonitor.ts     # Real-time media monitoring
 │   │   ├── events/
-│   │   │   ├── eventEmitter.ts     # Event emission
+│   │   │   ├── eventEmitter.ts     # Event emission with throttling
 │   │   │   ├── eventQueue.ts       # Event buffering
 │   │   │   └── types.ts            # Type definitions
 │   │   └── socket/
-│   │       └── proctorSocket.ts    # WebSocket communication
+│   │       └── proctorSocket.ts    # WebSocket with auto-reconnect
 │   │
 │   └── types/
 │       └── mediapipe.d.ts          # MediaPipe type declarations
@@ -68,16 +73,8 @@ frontend/
 │       ├── wasm/                   # WASM runtime files
 │       └── models/                 # Face detection model
 │
-└── download_mediapipe.ps1          # Download script for offline use
-│   ├── App.tsx                     # Main app component
-│   ├── main.tsx                    # Entry point
-│   └── index.css                   # Global styles + Tailwind
-│
-├── public/                         # Static assets
-├── package.json
-├── vite.config.ts
-├── tailwind.config.js
-└── tsconfig.json
+├── .env                            # Environment variables (VITE_API_URL)
+└── package.json
 ```
 
 ---
@@ -91,24 +88,32 @@ frontend/
 
 ### Setup
 
-```powershell
+```bash
 cd frontend
 
 # Install dependencies
 npm install
 
-# Download MediaPipe files for offline use (recommended)
+# Create environment file
+cp .env.example .env
+
+# Edit .env and set your API URL
+# VITE_API_URL=http://localhost:8000
+```
+
 .\download_mediapipe.ps1
 
 # Start development server
+
 npm run dev
-```
+
+````
 
 ### Development Server
 
 ```powershell
 npm run dev
-```
+````
 
 Access at: http://localhost:5173
 
